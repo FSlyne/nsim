@@ -1,3 +1,5 @@
+from tcp_listener import TCPListener
+from tcp_protocol import TCPSocket
 from queue import *
 from scapy.all import *
 
@@ -22,35 +24,15 @@ class tcpgen(duplex2):
 
    @threaded
    def worker1(self):
-      pcount=0
-      seq=10
-      syn=Ether()/IP()/TCP(flags="S", seq=seq)
-      stream=str(syn).encode("HEX")
-      self.A.put(stream)
-      item=self.A.get()
-      print item
-      eth=Ether(item.decode("HEX"))
-      ip=eth[IP]; synack=ip[TCP]
-      my_ack=synack.seq+1;seq=seq+1
-      ack=Ether()/IP()/TCP(flags="A",seq=seq,ack=my_ack)
-      stream=str(ack).encode("HEX")
-      self.A.put(stream)
-
-      while True:
-         stime=self.waittick()
-         if self.stop > 0:
-            if float(stime) > float(self.stop):
-               time.sleep(0.1)
-               continue
-         timlock=self.lock()
-         pcount+=1
-         payload="%d:%s" % (pcount,stime)
-         seq=seq+1; my_ack=my_ack+len(payload)
-         psh=Ether()/IP()/TCP(flags="PA",seq=seq,ack=my_ack)/payload
-         stream=str(psh).encode("HEX")
-         self.A.put(stream)
-         self.logwrite("%s Sending %s" % (self.name,payload))
-         self.unlock(timlock)
+      listener = TCPListener(self.A.get,self.A.put,'1.1.1.1')
+      conn=TCPSocket(listener)
+      conn.connect('2.2.2.2',80)
+      for i in range(1,5):
+         conn.send("Hello")
+         data=conn.recv(10000,timeout=4)
+         if data:
+           print data
+      conn.close()
          
 
 class tcpterm(duplex2):
@@ -60,31 +42,17 @@ class tcpterm(duplex2):
 
    @threaded
    def worker(self):
-      stream=self.B.get()
-      timlock=self.lock()
-      eth=Ether(stream.decode("HEX"))
-      ip=eth[IP]
-      syn=ip[TCP]
-      seq=syn.seq; ack=syn.seq+1
-      synack=Ether()/IP()/TCP(flags="SA",seq=seq,ack=ack,options=[('MSS', 1460)])
-      stream=str(synack).encode("HEX")
-      self.B.put(stream)
-      self.unlock(timlock)
+      listener = TCPListener(self.B.get,self.B.put,'2.2.2.2')
+      conn=TCPSocket(listener)
+      conn.bind('2.2.2.2',80)
       while True:
-         stream=self.B.get()
-         timlock=self.lock()
-         eth=Ether(stream.decode("HEX"))
-         ip=eth[IP]
-         psh=ip[TCP]
-         payload=psh.payload
-         ack=ack+len(payload)
-         seq=syn.seq # ????
-         data=Ether()/IP()/TCP(flags="PA",seq=seq,ack=ack, options=[('MSS', 1460)])/payload
-         stream=str(data).encode("HEX")
-         self.B.put(stream)
-         self.unlock(timlock)
+         data=conn.recv(10000,timeout=1)
+         conn.send("Goodbye") 
+         if data:
+            print data
+      conn.close()
 
-sched=scheduler(tick=0.001,finish=10)
+sched=scheduler(tick=0.01,finish=500)
 
 # node1=duplex2('node1',ratelimit=1000,MaxSize=100)
 node1=duplex2('node1')
