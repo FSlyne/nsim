@@ -12,14 +12,23 @@ class duplex2(duplex):
       self.pcapw.write(frame)
       return stream
 
-   def __del__(self):
-      print "Total packets : %s %d" % (self.name, self.pcount)
+class transmission(duplex2):
+   def __init__(self, *args, **kwargs):
+      super(transmission, self).__init__(*args, **kwargs)
+      self.pcapw=PcapWriter(self.name+'.pcap')
+
+   def inspect(self,stream,name):
+      self.waitfor(0.050)
+      stream=super(transmission,self).inspect(stream,name)
+      return stream
 
 class udpgen(duplex2):
    def __init__(self, *args, **kwargs):
       super(udpgen, self).__init__(*args, **kwargs)
       self.worker1()
       self.worker2()
+
+   
 
    @threaded
    def worker1(self):
@@ -29,7 +38,7 @@ class udpgen(duplex2):
          if self.stop > 0:
             if float(stime) > float(self.stop):
                time.sleep(0.1)
-               continue
+               break
          timlock=self.lock()
          pcount+=1
          payload="%d:%s" % (pcount,stime)
@@ -69,17 +78,17 @@ class udpterm(duplex2):
 
 sched=scheduler(tick=0.001,finish=500)
 
-# node1=duplex2('node1',ratelimit=1000,MaxSize=100)
-node1=duplex2('node1')
+node1=transmission('node1',MaxSize=1)
+# node1=duplex2('node1')
 
-udpxmit=udpgen('udpxmit',stop=3.0)
-udpxmit1=udpgen('udpxmt1',stop=3.0)
+udpxmit=udpgen('udpxmit',stop=3.0,MaxSize=500)
+# udpxmit1=udpgen('udpxmt1',stop=3.0)
 
 udprecv=udpterm('udprecv')
 
-hub=xhub('hub',[udpxmit.B,udpxmit1.B,node1.A])
+# hub=xhub('hub',[udpxmit.B,udpxmit1.B,node1.A])
 
-# connect('con1',udpxmit.B,node1.A)
+connect('con1',udpxmit.B,node1.A)
 connect('con2',udprecv.A,node1.B)
 
 sched.process()

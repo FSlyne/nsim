@@ -1,6 +1,6 @@
 from scapy.all import *
+from queue import *
 import random
-# from Queue import Queue
 import time
 
 class BadPacketError(Exception):
@@ -11,7 +11,7 @@ def get_payload(packet):
         packet = packet.payload
     return packet.payload
 
-class TCPSocket(object):
+class TCPSocket(process):
     def __init__(self, listener, debug=False):
         self.state = "CLOSED"
         self.debug = debug 
@@ -20,6 +20,8 @@ class TCPSocket(object):
         self.listener = listener
         self.seq = self._generate_seq()
         self.last_ack_sent = 0
+        process.__init__(self,0)
+        
 
 
     @staticmethod
@@ -149,7 +151,8 @@ class TCPSocket(object):
     def send(self, payload):
         # Block
         while self.state != "ESTABLISHED":
-            time.sleep(0.001)
+#            time.sleep(0.001)
+            self.waitfor(0.001)
         # Do the actual send
         self._send_ack(load=payload, flags="P")
 
@@ -158,7 +161,8 @@ class TCPSocket(object):
         start_time = time.time()
         # Block until the connection is closed
         while len(self.recv_buffer) < size:
-            time.sleep(0.001)
+            self.waitfor(0.001)
+#            time.sleep(0.001)
             if self.state in ["CLOSED", "LAST-ACK"]:
                 break
             if timeout < (time.time() - start_time):

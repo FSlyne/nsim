@@ -20,42 +20,37 @@ class duplex2(duplex):
 class tcpgen(duplex2):
    def __init__(self, *args, **kwargs):
       super(tcpgen, self).__init__(*args, **kwargs)
+      self.listener = TCPListener(self.A.get,self.A.put,'1.1.1.1')
+      self.conn=TCPSocket(self.listener)
+      self.conn.connect('2.2.2.2',80)
       self.worker1()
 
    @threaded
    def worker1(self):
-      listener = TCPListener(self.A.get,self.A.put,'1.1.1.1')
-      conn=TCPSocket(listener)
-      conn.connect('2.2.2.2',80)
-      for i in range(1,5):
-         conn.send("Hello")
-         data=conn.recv(10000,timeout=4)
-         if data:
-           print data
-      conn.close()
+      for i in range(1,100):
+         stime=self.waittick()
+         self.conn.send("Hello")
+      self.conn.close()
          
 
 class tcpterm(duplex2):
    def __init__(self, *args, **kwargs):
       super(tcpterm, self).__init__(*args, **kwargs)
+      self.listener = TCPListener(self.B.get,self.B.put,'2.2.2.2')
+      self.conn=TCPSocket(self.listener)
+      self.conn.bind('2.2.2.2',80)
       self.worker()
 
    @threaded
    def worker(self):
-      listener = TCPListener(self.B.get,self.B.put,'2.2.2.2')
-      conn=TCPSocket(listener)
-      conn.bind('2.2.2.2',80)
       while True:
-         data=conn.recv(10000,timeout=1)
-         conn.send("Goodbye") 
-         if data:
-            print data
-      conn.close()
+         data=self.conn.recv(10000,timeout=1)
+      self.conn.close()
 
-sched=scheduler(tick=0.01,finish=500)
+sched=scheduler(tick=0.001,finish=10)
 
-# node1=duplex2('node1',ratelimit=1000,MaxSize=100)
-node1=duplex2('node1')
+node1=duplex2('node1',ratelimit=1000,MaxSize=100)
+# node1=duplex2('node1')
 
 tcpxmit=tcpgen('tcpxmit',stop=3.0)
 

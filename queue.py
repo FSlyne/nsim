@@ -19,10 +19,11 @@ class Queue():
   import string
   import random
 
-  def __init__(self,ival=0.001,MaxSize=0):
+  def __init__(self,name='queue',ival=0.001,MaxSize=0):
     self.ival=ival
     self.MaxSize = MaxSize
-    self.queuename="queue:"+self.randtoken()
+    self.name=name
+    self.queuename="queue:"+self.randtoken()+":("+self.name+")"
 
   def randtoken(self,size=6, chars=string.ascii_uppercase + string.digits):
     return ''.join(self.random.choice(chars) for _ in range(size))    
@@ -86,17 +87,21 @@ class connector(process):
    def worker(self):
       while self.isactive():
          timlock=self.lock()
-         bps=self.getbps(self.name)
-         self.qsize=self.b.qsize()
+#         bps=self.getbps(self.name)
+         self.qsize=max(self.a.qsize(),self.qsize)
          self.updatebps(self.name,0)
          self.unlock(timlock)
 #         print self.name,self.getsimtime(),bps,self.qsize
-         if self.ratelimit > 0 and bps > self.ratelimit:
+         if self.b.MaxSize > 0 and self.b.qsize() >= self.b.MaxSize: # Back Pressure
+            time.sleep(0.01)
+            print "Back Pressure", self.b.qsize(), self.b.MaxSize
+            continue
+         if self.ratelimit > 0 and self.getbps(self.name) > self.ratelimit: # Rate Limit
             time.sleep(0.01)
             continue
          item=self.a.get()
-         timlock=self.lock()
          item=self.inspect(item,self.name)
+         timlock=self.lock()
          self.updatebps(self.name,len(item)*8)
          if not self.b.put(item):
             print "Dropping Packets"
@@ -168,9 +173,9 @@ class hub(object):
          t.put(item)
       
 class connect(object):
-   def __init__(self,name,X,Y):
-      connector(name+':connect1',X.outq,Y.inq,self.inspect)
-      connector(name+':connect2',Y.outq,X.inq,self.inspect)
+   def __init__(self,name,X,Y,ratelimit=0):
+      connector(name+':connect1',X.outq,Y.inq,self.inspect,ratelimit=ratelimit)
+      connector(name+':connect2',Y.outq,X.inq,self.inspect,ratelimit=ratelimit)
 
    def inspect(self,item,name):
        return item
@@ -220,10 +225,10 @@ class duplex(process):
       self.start = start
       self.stop = stop
       self.ratelimit = ratelimit
-      self.a = Queue(MaxSize=MaxSize)
-      self.b = Queue(MaxSize=MaxSize)
-      self.c = Queue(MaxSize=MaxSize)
-      self.d = Queue(MaxSize=MaxSize)
+      self.a = Queue(name=self.name+':a',MaxSize=MaxSize)
+      self.b = Queue(name=self.name+':b',MaxSize=MaxSize)
+      self.c = Queue(name=self.name+':c',MaxSize=MaxSize)
+      self.d = Queue(name=self.name+':d',MaxSize=MaxSize)
       connector(name+':link1',self.a,self.b,self.inspect,self.ratelimit) # a -> b, forward from interface A to interface B
       connector(name+':link2',self.d,self.c,self.inspect,self.ratelimit) # c -> d, reverse from interface B to interface A
 

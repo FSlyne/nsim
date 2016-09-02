@@ -234,7 +234,7 @@ class process(object):
        pass
 
   def writedb(self,attr,value):
-    self.r.set(attr,float(value))
+    self.r.set(attr,str(value))
 
 
   def updatebps(self,elem,bits): # bits
