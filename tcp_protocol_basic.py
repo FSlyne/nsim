@@ -3,9 +3,6 @@ from queue import *
 import random
 import time
 
-host = '127.0.0.1'
-port = '6379'
-
 class BadPacketError(Exception):
     pass
 
@@ -15,32 +12,15 @@ def get_payload(packet):
     return packet.payload
 
 class TCPSocket(process):
-    import random
-    import string
     def __init__(self, listener, debug=False):
         self.state = "CLOSED"
-        self.debug = debug = True
+        self.debug = debug 
         self.src_ip = listener.ip_address
         self.recv_buffer = ""
         self.listener = listener
         self.seq = self._generate_seq()
-        self.seq = 1234
         self.last_ack_sent = 0
-        self.wb=windowbuffer()
         process.__init__(self,0)
-        self.actual_ack = 0
-        self.window = 10
-        self.r = redis.Redis(host=host,port=port )
-        self.xid = self.randtoken()
-        self.reqwindow =5
-        self.last_ack_recv = 0
-#        self.wbhandler()
-        self.trigger=1345
-
-    def randtoken(self,size=6, chars=string.ascii_uppercase + string.digits):
-      return ''.join(self.random.choice(chars) for _ in range(size))
-
-
         
     @staticmethod
     def _has_load(packet):
@@ -71,54 +51,13 @@ class TCPSocket(process):
     def _generate_seq():
         return random.randint(0, 100000)
 
-    def remseqlist(self,threshseq,flags=""):
-        l = self.r.keys(pattern="seq:"+self.xid+":*")
-        for e in l:
-           seq=e.split(':')[-1:][0]
-           if int(seq) < int(threshseq):
-              self.r.delete("seq:"+self.xid+":"+str(seq))
-              print ">>>>",seq, threshseq," ",
-
-    def replayseq(self,threshseq):
-        l = self.r.keys(pattern="seq:"+self.xid+":*")
-        l.sort()
-        print "seq:",
-        for e in l:
-           seq=e.split(':')[-1:][0]
-           if int(seq) >= int(threshseq):
-              print seq,
-              payload=self.r.get("seq:"+self.xid+":"+str(seq))
-              print payload,
-              self._send_ack(load=payload, flags="P") 
-              self.seq=int(seq)
-        print
-
-
-    @threaded
-    def wbhandler(self):
-        while True:
-          if self.seq - self.last_ack_recv > self.window:
-            print ">>>>>>",self.seq,self.last_ack_recv,self.window,(self.seq - self.last_ack_recv)
-            time.sleep(0.25)
-            return
-          else:
-            print "++++++",self.seq,self.last_ack_recv,self.window,(self.seq - self.last_ack_recv)
-          payload=self.r.lpop("inbuf:"+self.xid)
-          if payload is not None:
-            self.r.set("seq:"+self.xid+":"+str(self.seq),payload)
-            self._send_ack(load=payload, flags="P")
-          else:
-             return
-#            time.sleep(0.25)
-
     def _send(self, flags="", load=None):
         """Every packet we send should go through here."""
         packet = TCP(dport=self.dest_port,
                      sport=self.src_port,
                      seq=self.seq,
                      ack=self.last_ack_sent,
-                     flags=flags,
-                     window=self.window)
+                     flags=flags)
         # Add the IP header
         full_packet = Ether(src='00:00:00:11:22:33',dst='00:00:00:22:33:44')/self.ip_header / packet
         # Add the payload
@@ -160,20 +99,14 @@ class TCPSocket(process):
         self.listener.close(self.src_ip, self.src_port)
 
     def handle(self, packet):
-        # Handle incoming packets
         if self.last_ack_sent and self.last_ack_sent != packet.seq:
             if self.debug:
                print "+++++++ Handle Dropping Packet ++++++"
                print self.last_ack_sent,  packet.seq
+            # We're not in a place to receive this packet. Drop it.
 #            return
 
         self.last_ack_sent = max(self.next_seq(packet), self.last_ack_sent)
-        self.last_ack_recv = packet.ack
-        
-#        self.wbhandler()
-
-#        self.remseqlist(packet.ack)
-        self.reqwindow=packet.window
 
         recv_flags = packet.sprintf("%TCP.flags%")
 
@@ -184,12 +117,7 @@ class TCPSocket(process):
         # Handle all the cases for self.state explicitly
         if self._has_load(packet):
             self.recv_buffer += packet.load
-            if self.last_ack_sent - self.actual_ack > self.reqwindow:
-               if self.last_ack_sent == 1310:
-                  self.last_ack_sent = 1265
-               self._send_ack()
-               self.actual_ack = self.last_ack_sent
-#               self.window += self.window
+            self._send_ack()
         elif "R" in recv_flags:
             self._close()
         elif "S" in recv_flags:
@@ -211,15 +139,6 @@ class TCPSocket(process):
                 self._send_ack()
                 self._close()
         elif "A" in recv_flags:
-            if self.state ==  "ESTABLISHED":
-               if self.r.sismember("acksrcvd",str(packet.ack)):
-                 print "!!!!!",self.last_ack_recv, packet.ack
-                 self.window=10
-                 self.replayseq(packet.ack)
-               else:
-                 self.window += self.window
-                 self.last_ack_recv = packet.ack
-                 self.r.sadd("acksrcvd",str(packet.ack))
             if self.state == "SYN-RECEIVED":
                 self.state = "ESTABLISHED"
             elif self.state == "LAST-ACK":
@@ -233,9 +152,7 @@ class TCPSocket(process):
 #            time.sleep(0.001)
             self.waitfor(0.001)
         # Do the actual send
-        self.r.rpush("inbuf:"+self.xid,str(payload))
-        self.wbhandler()
-#        self._send_ack(load=payload, flags="P")
+        self._send_ack(load=payload, flags="P")
 
 
     def recv(self, size, timeout=None):
@@ -253,7 +170,7 @@ class TCPSocket(process):
         return recv
 
 class windowbuffer(object):
-  def __init__(self,winsize=100,host = '127.0.0.1', port = '6379'):
+  def __init__(self,winsize=100,host = '127.0.0.1', port = '6379')
      host = '127.0.0.1'
      port = '6379'
      self.r = redis.Redis(host=host,port=port )
@@ -261,7 +178,6 @@ class windowbuffer(object):
      self.bbuffer = 'bbuf'
      self.windex=self.rindex=self.aindex=0
      self.winsize=winsize
-     self.activewindow=False
 
   def write(self,line):
      for c in line:
@@ -272,8 +188,6 @@ class windowbuffer(object):
      buf=''
      for i in range(0,count):
         c=self.lpoprpush(self.bbuffer,self.abuffer)
-        if not c:
-           break
         if c:
            buf=buf+c
            self.rindex+=1
@@ -282,15 +196,13 @@ class windowbuffer(object):
   def lpoprpush(self,a,b):
      x=self.r.lpop(a)
      if x:
-        if self.activewindow:
-           self.r.rpush(b,x)
+        self.r.rpush(b,x)
      return x
 
   def rpoplpush(self,a,b):
      x=self.r.rpop(a)
      if x:
-        if self.activewindow:
-           self.r.lpush(b,x)
+        self.r.lpush(b,x)
      return x
 
   def display(self,l):

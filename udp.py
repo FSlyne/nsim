@@ -18,7 +18,7 @@ class transmission(duplex2):
       self.pcapw=PcapWriter(self.name+'.pcap')
 
    def inspect(self,stream,name):
-      self.waitfor(0.050)
+#      self.waitfor(0.050)
       stream=super(transmission,self).inspect(stream,name)
       return stream
 
@@ -81,8 +81,8 @@ sched=scheduler(tick=0.001,finish=500)
 node1=transmission('node1',MaxSize=1)
 # node1=duplex2('node1')
 
-udpxmit=udpgen('udpxmit',stop=3.0,MaxSize=500)
-# udpxmit1=udpgen('udpxmt1',stop=3.0)
+# udpxmit=udpgen('udpxmit',stop=3.0,MaxSize=500)
+udpxmit=udpgen('udpxmt',stop=3.0)
 
 udprecv=udpterm('udprecv')
 

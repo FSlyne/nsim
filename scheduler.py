@@ -13,6 +13,9 @@ def threaded(fn):
 hostname = '127.0.0.1'
 port = '6379'
 
+pool = redis.ConnectionPool(host='localhost', port=6379, db=0)
+globalr = redis.Redis(connection_pool=pool )
+
 #r = redis.Redis(
 #    host=hostname,
 #    port=port )
@@ -27,7 +30,8 @@ class scheduler(object):
       self.tickqueue='ticks'
       self.sectickqueue='secticks'
       self.simtime=0.000
-      self.r = redis.Redis(host=hostname,port=port )
+#      self.r = redis.Redis(host=hostname,port=port )
+      self.r = globalr
       self.r.flushall()
       self.syncdb()
       self.setactive()
@@ -152,7 +156,8 @@ class process(object):
   import string
   import random
   def __init__(self,now=0,debug=False):
-    self.r= redis.Redis(host=hostname,port=port )
+#    self.r= redis.Redis(host=hostname,port=port )
+    self.r = globalr
     self.now=now
     self.begin()
     self.debug=debug

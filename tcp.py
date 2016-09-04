@@ -49,8 +49,8 @@ class tcpterm(duplex2):
 
 sched=scheduler(tick=0.001,finish=10)
 
-node1=duplex2('node1',ratelimit=1000,MaxSize=100)
-# node1=duplex2('node1')
+# node1=duplex2('node1',ratelimit=1000,MaxSize=100)
+node1=duplex2('node1')
 
 tcpxmit=tcpgen('tcpxmit',stop=3.0)
 

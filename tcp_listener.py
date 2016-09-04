@@ -34,7 +34,10 @@ class TCPListener(object):
 #            self.send(reset)
 #            print "Resetting"
 #            return
-        conn = self.open_sockets[ip, port]
+        try:
+           conn = self.open_sockets[ip, port]
+        except:
+           print "Open Sockets Issue"
         conn.handle(pkt)
 
     def send(self, packet):

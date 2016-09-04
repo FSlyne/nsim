@@ -197,7 +197,7 @@ class layer(object):
       self.C=self.up.B
       self.D=self.down.A
 
-class stack(object):
+class stack1(object):
    def __init__(self,name):
       self.layer1=layer('layer1')
       self.layer2=layer('layer2')
@@ -215,6 +215,25 @@ class stack(object):
       connect('J6',self.layer3.D,self.layer4.B)
 
       connect('top',self.layer4.C,self.layer4.D)
+
+class stack(object):
+   def __init__(self,name,n=1):
+     if n<1:
+        print "Number of stacks must be 1 or greater"
+        return
+     self.layer = []
+     self.layer.append('a')
+     for i in range(1,n+1):
+        self.layer.append(layer('layer'+str(i)))
+
+     for i in range(1,n):
+        connect('J'+str(2*i-1),self.layer[i].C,self.layer[i+1].A)
+        connect('J'+str(2*i-1),self.layer[i].D,self.layer[i+1].B)
+
+     self.A=self.layer[1].A
+     self.B=self.layer[1].B
+
+     connect('top',self.layer[n].C,self.layer[n].D)
 
 
 
@@ -265,13 +284,17 @@ class duplex(process):
 class trafgen(duplex):
    def __init__(self, *args, **kwargs):
       super(trafgen, self).__init__(*args, **kwargs)
+
+      self.worker1()
       self.worker2()
 
    @threaded
-   def worker1(self,simtime):
-     timlock=self.lock()
-     self.A.put(b'N')
-     self.unlock(timlock)
+   def worker1(self):
+     while True:
+       stime=self.waittick()
+       timlock=self.lock()
+       self.A.put(b'N')
+       self.unlock(timlock)
 
    @threaded
    def worker2(self):
@@ -291,7 +314,7 @@ class terminal(duplex):
       while True:
          item=self.B.get()
          timlock=self.lock()
-#         time.sleep(1)
+#         time.sleep(0.1)
          item="Bounce '%s'" % (str(item))
          self.B.put(item)
          self.unlock(timlock)
