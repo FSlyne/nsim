@@ -25,10 +25,12 @@ class scheduler(object):
       self.finish = finish
       self.tick = tick 
       self.gap = tick*0.9
-      self.wait = wait
+      self.wait = wait = 0.001
       self.waitqueue='schedule'
       self.tickqueue='ticks'
       self.sectickqueue='secticks'
+      self.ms10tickqueue='10msticks'
+      self.ms100tickqueue='100msticks'
       self.simtime=0.000
 #      self.r = redis.Redis(host=hostname,port=port )
       self.r = globalr
@@ -69,6 +71,8 @@ class scheduler(object):
             self.simtime+=self.tick
             self.process_ticks()
             self.process_secticks()
+            self.process_10msticks()
+            self.process_100msticks()
             self.syncdb()
             self.scanp()
          if self.wait > 0:
@@ -115,6 +119,37 @@ class scheduler(object):
              self.debug("%s +" % self.simtime)
       except:
         self.debug("%s !" %self.simtime)
+
+   def process_10msticks(self):
+      if not self.is_integer(float(self.simtime)*100):
+          return
+      try:
+        for result,score in self.r.zrangebyscore(self.ms10tickqueue, 0 ,str(self.simtime+self.gap),withscores=True):
+          if self.r.zrem(self.ms10tickqueue, result) == 1:
+             self.signal(result)
+             self.debug("%s %s %s" % (str(self.simtime),str(score),str(result)))
+          else:
+             self.debug("%s *" % self.simtime)
+        else:
+             self.debug("%s +" % self.simtime)
+      except:
+        self.debug("%s !" %self.simtime)
+
+   def process_100msticks(self):
+      if not self.is_integer(float(self.simtime)*10):
+          return
+      try:
+        for result,score in self.r.zrangebyscore(self.ms100tickqueue, 0 ,str(self.simtime+self.gap),withscores=True):
+          if self.r.zrem(self.ms100tickqueue, result) == 1:
+             self.signal(result)
+             self.debug("%s %s %s" % (str(self.simtime),str(score),str(result)))
+          else:
+             self.debug("%s *" % self.simtime)
+        else:
+             self.debug("%s +" % self.simtime)
+      except:
+        self.debug("%s !" %self.simtime)
+
 
    def isclose(self,a, b, rel_tol=1e-09, abs_tol=0.0):
       return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
@@ -223,6 +258,20 @@ class process(object):
   def waitsectick(self):
     key=self.gettoken()
     self.r.zadd('secticks',str(key),str(0))
+    result,score=self.r.blpop(key)
+    self.release(key)
+    return str(int(float(self.getsimtime())))
+
+  def wait10mstick(self):
+    key=self.gettoken()
+    self.r.zadd('10msticks',str(key),str(0))
+    result,score=self.r.blpop(key)
+    self.release(key)
+    return str(int(float(self.getsimtime())))
+
+  def wait100mstick(self):
+    key=self.gettoken()
+    self.r.zadd('100msticks',str(key),str(0))
     result,score=self.r.blpop(key)
     self.release(key)
     return str(int(float(self.getsimtime())))

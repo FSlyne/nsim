@@ -45,8 +45,20 @@ class TCPListener(object):
          if self.debug:
             print "+++++ Sending Packets on Wire++++++++"
             packet.show()
-         packet=str(packet).encode("HEX")
-         self.xmit(packet)
+         try:
+            packet=str(packet).encode("HEX")
+            self.xmit(packet)
+         except:
+            packet.show()
+            print "packet encoding exception"
+            packet.show()
+
+    def split2len(self,s, n):
+       def _f(s, n):
+          while s:
+            yield s[:n]
+            s = s[n:]
+       return list(_f(s, n))
 
     def get_port(self):
         # We need to return a new port number to each new connection
@@ -65,6 +77,7 @@ class TCPListener(object):
            # listen on the wire
            packet=self.recv()
            packet=Ether(str(packet).decode("HEX"))
+#           packet=IP(str(packet).decode("HEX"))
            if self.debug:
               print "+++++ Receiving Packets on Wire ++++++++"
               packet.show()

@@ -27,11 +27,13 @@ class tcpgen(duplex2):
 
    @threaded
    def worker1(self):
-      for i in range(1,100):
+      for i in range(1,5000):
          stime=self.waittick()
-         self.conn.send("Hello")
+         self.conn.send("A"*250)
+      self.waitfor(9.999)
+      print "closing"
       self.conn.close()
-         
+               
 
 class tcpterm(duplex2):
    def __init__(self, *args, **kwargs):
@@ -46,6 +48,8 @@ class tcpterm(duplex2):
       while True:
          data=self.conn.recv(10000,timeout=1)
       self.conn.close()
+
+print conf.netcache.arp_cache
 
 sched=scheduler(tick=0.001,finish=10)
 

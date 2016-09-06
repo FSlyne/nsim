@@ -19,28 +19,43 @@ class TCPSocket(process):
     import string
     def __init__(self, listener, debug=False):
         self.state = "CLOSED"
-        self.debug = debug = True
+        self.debug = debug
+    
+        self.use_fastretransmit = True
+        self.window = self.reqwindow = self.mss =1000
+        self.cwnd = self.mss
+        self.ssthresh = self.mss * 5
+        self.congestion_state = 0 # slow start =0, congestion avoid = 1, fast recovery = 2
+
         self.src_ip = listener.ip_address
         self.recv_buffer = ""
         self.listener = listener
         self.seq = self._generate_seq()
         self.seq = 1234
+        self.ackvol=0
         self.last_ack_sent = 0
-        self.wb=windowbuffer()
         process.__init__(self,0)
         self.actual_ack = 0
-        self.window = 10
         self.r = redis.Redis(host=host,port=port )
         self.xid = self.randtoken()
-        self.reqwindow =5
         self.last_ack_recv = 0
-#        self.wbhandler()
-        self.trigger=1345
+        self.bulksend()
+        self.statscollector()
+        self.ackmgr()
+
+        self.retranQ = retransmission(callback=self.sendseq, xid=self.xid,congmgr=self.congestion_mgr)
 
     def randtoken(self,size=6, chars=string.ascii_uppercase + string.digits):
       return ''.join(self.random.choice(chars) for _ in range(size))
 
-
+    @threaded
+    def statscollector(self):
+      f = open("tcpstats_%s.log" % self.listener.ip_address, "w")
+      f.write("ms\tcwnd\tssthresh\n")
+      while True:
+         self.wait10mstick()
+         f.write("%0.3f\t%s\t%s\n" %(float(self.getsimtime()),str(self.window),str(self.ssthresh)))
+      f.close()
         
     @staticmethod
     def _has_load(packet):
@@ -71,45 +86,101 @@ class TCPSocket(process):
     def _generate_seq():
         return random.randint(0, 100000)
 
-    def remseqlist(self,threshseq,flags=""):
-        l = self.r.keys(pattern="seq:"+self.xid+":*")
-        for e in l:
-           seq=e.split(':')[-1:][0]
-           if int(seq) < int(threshseq):
-              self.r.delete("seq:"+self.xid+":"+str(seq))
-              print ">>>>",seq, threshseq," ",
-
-    def replayseq(self,threshseq):
-        l = self.r.keys(pattern="seq:"+self.xid+":*")
-        l.sort()
-        print "seq:",
-        for e in l:
-           seq=e.split(':')[-1:][0]
-           if int(seq) >= int(threshseq):
-              print seq,
-              payload=self.r.get("seq:"+self.xid+":"+str(seq))
-              print payload,
-              self._send_ack(load=payload, flags="P") 
-              self.seq=int(seq)
-        print
+    # congestion states: slow start =0, congestion avoid = 1, fast recovery = 2
+    def congestion_mgr(self,typ=0): # 0 = timeout, 1 = dup, 2 = non-dup, 3 = double-dup
+       lock=self.lock()
+       cong=self.congestion_state; ssthresh = self.ssthresh; window = self.window
+       if self.use_fastretransmit:
+          if self.congestion_state == 0: # slow start
+             if typ == 2: # non-dup
+                self.window+=self.mss
+                if self.window >= self.ssthresh:
+                   self.congestion_state = 1
+             else:
+                self.congestion_state == 0
+                self.window = self.mss
+          elif self.congestion_state == 1: # avoid
+             if typ == 2: # non-dup
+                if self.ackvol >= self.window:
+                   self.window+=self.mss
+                self.congestion_state = 1
+             elif typ == 0:#timeout
+                self.ssthresh = int(self.window/2)
+                self.window = self.ssthresh + 3*self.mss
+             elif typ == 1: # dup
+                self.ssthresh = int(self.window/2)
+                self.window = self.mss
+                self.congestion_state = 2
+             else:
+                self.window = self.mss
+          elif self.congestion_state == 2: # fast_recovery
+             if typ == 2: # non-dup
+                self.ssthresh = self.window
+             elif typ == 1: # dup
+                self.window +=self.window
+       else:
+          if self.congestion_state == 0: # slow start
+             if typ == 2: # non-dup
+                self.window+=self.mss
+                if self.window >= self.ssthresh:
+                   self.congestion_state = 1
+             else:
+                self.congestion_state == 0
+                self.window = self.mss
+          elif self.congestion_state == 1: # avoid
+             if typ == 2: # non-dup
+#                 print "ack vol =",self.ackvol,self.window
+                 if self.ackvol >= self.window:
+                    self.window+=self.mss
+#                self.window = int(self.window+1/self.window)
+#                 self.window+=1
+             else:
+                self.window = self.mss
+          else:
+             pass
+       if not cong == self.congestion_state:
+          print "Congestion state has changed from %d to %d " % (cong, self.congestion_state)
+       if not ssthresh == self.ssthresh:
+          print "SSthresh has changed from %d to %d" % (ssthresh, self.ssthresh)
+       if not window == self.window:
+          print "Congestion window has changed from %d to %d" % (window, self.window)
+       self.unlock(lock)
 
 
     @threaded
-    def wbhandler(self):
-        while True:
-          if self.seq - self.last_ack_recv > self.window:
-            print ">>>>>>",self.seq,self.last_ack_recv,self.window,(self.seq - self.last_ack_recv)
-            time.sleep(0.25)
-            return
-          else:
-            print "++++++",self.seq,self.last_ack_recv,self.window,(self.seq - self.last_ack_recv)
-          payload=self.r.lpop("inbuf:"+self.xid)
-          if payload is not None:
-            self.r.set("seq:"+self.xid+":"+str(self.seq),payload)
-            self._send_ack(load=payload, flags="P")
-          else:
-             return
-#            time.sleep(0.25)
+    def bulksend(self):
+       while True:
+          payload=self.r.blpop("inbuf:"+self.xid)[1]
+          self.r.set("seq:"+self.xid+":"+str(self.seq),payload)
+          self.retranQ.add(self.seq)
+          self._send_ack(load=payload, flags='')
+          self.seq += len(payload)
+#          print len(payload),self.seq,self.last_ack_recv,self.window
+          while True:
+             diff = len(payload)+self.seq - self.last_ack_recv
+             # don't send if self.seq > self.last_ack_recv + min(cwnd, rwnd)
+             if len(payload)+self.seq - self.last_ack_recv >= self.window*1.4:
+                self.waitfor(0.001)
+             else:
+#                print "++++",self.seq,self.window,diff
+                break
+
+    def sendseq(self,seq,flags=""):
+#        print "sendseq: ",seq
+        payload=self.r.get("seq:"+self.xid+":"+str(seq))
+        if not payload:
+           return
+        
+        packet = TCP(dport=self.dest_port,
+                     sport=self.src_port,
+                     seq=int(seq),
+                     ack=self.last_ack_sent,
+                     flags=flags,
+                     window=self.window)
+        # Add the IP header
+        full_packet = Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')/self.ip_header / packet / payload
+        self.listener.send(full_packet)
+                
 
     def _send(self, flags="", load=None):
         """Every packet we send should go through here."""
@@ -119,16 +190,15 @@ class TCPSocket(process):
                      ack=self.last_ack_sent,
                      flags=flags,
                      window=self.window)
-        # Add the IP header
-        full_packet = Ether(src='00:00:00:11:22:33',dst='00:00:00:22:33:44')/self.ip_header / packet
+        full_packet = Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')/self.ip_header / packet
         # Add the payload
         if load:
             full_packet = full_packet / load
         # Send the packet over the wire
         self.listener.send(full_packet)
         # Update the sequence number with the number of bytes sent
-        if load is not None:
-            self.seq += len(load)
+#        if load is not None:
+#            self.seq += len(load)
 
     def _send_syn(self):
         self.state = "SYN-SENT"
@@ -161,6 +231,7 @@ class TCPSocket(process):
 
     def handle(self, packet):
         # Handle incoming packets
+        lock=self.lock()
         if self.last_ack_sent and self.last_ack_sent != packet.seq:
             if self.debug:
                print "+++++++ Handle Dropping Packet ++++++"
@@ -169,11 +240,7 @@ class TCPSocket(process):
 
         self.last_ack_sent = max(self.next_seq(packet), self.last_ack_sent)
         self.last_ack_recv = packet.ack
-        
-#        self.wbhandler()
-
-#        self.remseqlist(packet.ack)
-        self.reqwindow=packet.window
+        self.cwnd = packet.window
 
         recv_flags = packet.sprintf("%TCP.flags%")
 
@@ -183,13 +250,9 @@ class TCPSocket(process):
 
         # Handle all the cases for self.state explicitly
         if self._has_load(packet):
-            self.recv_buffer += packet.load
-            if self.last_ack_sent - self.actual_ack > self.reqwindow:
-               if self.last_ack_sent == 1310:
-                  self.last_ack_sent = 1265
-               self._send_ack()
-               self.actual_ack = self.last_ack_sent
-#               self.window += self.window
+            self.recv_buffer += packet.load # Officially received ????
+            self.r.set("ack:"+self.xid+":"+"%010d"% packet.seq,len(packet.load))
+#               self._send_ack()
         elif "R" in recv_flags:
             self._close()
         elif "S" in recv_flags:
@@ -202,6 +265,7 @@ class TCPSocket(process):
                 self.state = "ESTABLISHED"
                 self._send_ack()
         elif "F" in recv_flags:
+#            self.retranQ.clearall()
             if self.state == "ESTABLISHED":
                 self.seq += 1
                 self.state = "LAST-ACK"
@@ -212,20 +276,17 @@ class TCPSocket(process):
                 self._close()
         elif "A" in recv_flags:
             if self.state ==  "ESTABLISHED":
-               if self.r.sismember("acksrcvd",str(packet.ack)):
-                 print "!!!!!",self.last_ack_recv, packet.ack
-                 self.window=10
-                 self.replayseq(packet.ack)
-               else:
-                 self.window += self.window
-                 self.last_ack_recv = packet.ack
-                 self.r.sadd("acksrcvd",str(packet.ack))
+               self.ackvol=self.retranQ.cleardown(packet.ack)
+               self.congestion_mgr(2)
+#               self.retranQ.remove(packet.ack-1)
+               self.last_ack_recv = packet.ack
             if self.state == "SYN-RECEIVED":
                 self.state = "ESTABLISHED"
             elif self.state == "LAST-ACK":
                 self._close()
         else:
             raise BadPacketError("Oh no!")
+        self.unlock(lock)
 
     def send(self, payload):
         # Block
@@ -234,7 +295,7 @@ class TCPSocket(process):
             self.waitfor(0.001)
         # Do the actual send
         self.r.rpush("inbuf:"+self.xid,str(payload))
-        self.wbhandler()
+#        self.waitfor(0.001)
 #        self._send_ack(load=payload, flags="P")
 
 
@@ -252,72 +313,120 @@ class TCPSocket(process):
         self.recv_buffer = self.recv_buffer[size:]
         return recv
 
-class windowbuffer(object):
-  def __init__(self,winsize=100,host = '127.0.0.1', port = '6379'):
-     host = '127.0.0.1'
-     port = '6379'
-     self.r = redis.Redis(host=host,port=port )
-     self.abuffer = 'abuf'
-     self.bbuffer = 'bbuf'
-     self.windex=self.rindex=self.aindex=0
-     self.winsize=winsize
-     self.activewindow=False
+    @threaded
+    def ackmgr(self):
+      while True:
+        lock=self.lock()
+        x=[]; y=[]
+        l = self.r.keys(pattern="ack:"+self.xid+":*")
+        l.sort()
+#        print l
+        for e in l:
+           seq=int(e.split(':')[-1:][0].lstrip("0"))
+           val=int(self.r.get("ack:"+self.xid+":"+"%010d" % seq))
+           x.append(seq); y.append(seq+val)
+        if x:
+#           print "*:",x,"+:",y
+           start=end=x.pop(0)
+           while True:
+              if not x:
+                break
+              w = x.pop(0)
+              if not w:
+                break
+              v = y.pop(0)
+              if not v:
+                break
+              if w == v:
+                end = w
+#           print "ack window: ",end-start,end, start
+           if end-start >= self.cwnd:
+              self.ack = end+1
+              self._send_ack()
+              for e in l:
+                 seq=int(e.split(':')[-1:][0].lstrip("0"))
+                 if seq <= end:
+#                    print "deleting:", "ack:"+self.xid+":"+"%010d" % seq
+                    self.r.delete("ack:"+self.xid+":"+"%010d" % seq)
+        self.unlock(lock)
+        self.waitfor(0.005)
 
-  def write(self,line):
-     for c in line:
-        self.r.rpush(self.bbuffer,c)
-        self.windex+=1
+class retransmission(process):
+    def __init__(self,callback='',congmgr='',xid='',queue='retransmission',rto=3.000):
+       self.r = redis.Redis(host=host,port=port )
+       self.xid=xid
+       self.queue = queue
+       self.queue2 = queue+"2"
+       self.rto = rto
+       self.gap = rto*0.9
+       self.callback=callback
+       self.congmgr=congmgr
+       process.__init__(self,0)
+       self.routine()
+       self.routine2()
 
-  def read(self,count):
-     buf=''
-     for i in range(0,count):
-        c=self.lpoprpush(self.bbuffer,self.abuffer)
-        if not c:
-           break
-        if c:
-           buf=buf+c
-           self.rindex+=1
-     return buf
+    @threaded
+    def routine(self):
+       while True:
+          for seq,tick in self.r.zrangebyscore(self.queue, 0 ,str(float(self.getsimtime())+self.gap),withscores=True):
+             self.congmgr(0) # signal a timeout
+             self.callback(seq)
+             self.remove(seq)
+             self.add2(seq)
+          else:
+             self.waitfor(0.005)
 
-  def lpoprpush(self,a,b):
-     x=self.r.lpop(a)
-     if x:
-        if self.activewindow:
-           self.r.rpush(b,x)
-     return x
+    @threaded
+    def routine2(self):
+       while True:
+          for seq,tick in self.r.zrangebyscore(self.queue2, 0 ,str(float(self.getsimtime())+self.gap),withscores=True):
+             self.congmgr(0) # signal a timeout
+             self.callback(seq)
+             self.remove2(seq)
+#             self.add(seq)
+          else:
+             self.waitfor(0.005)
 
-  def rpoplpush(self,a,b):
-     x=self.r.rpop(a)
-     if x:
-        if self.activewindow:
-           self.r.lpush(b,x)
-     return x
+    def remove(self,seq):
+       try:
+         size=int(len(self.r.get("seq:"+self.xid+":"+str(seq))))
+       except:
+         size=0
+       return self.r.zrem(self.queue, str(seq)),size
 
-  def display(self,l):
-     s=self.r.llen(l)
-     buff=''
-     for i in range(0,s):
-        buff+=self.lpoprpush(l,l)
-     print buff
+    def remove2(self,seq):
+       try:
+         size=int(len(self.r.get("seq:"+self.xid+":"+str(seq))))
+       except:
+         size=0
+       return self.r.zrem(self.queue2, str(seq)),size
 
-  def inspect(self):
-     self.display(self.abuffer)
-     self.display(self.bbuffer)
-     print "a=%d, r=%d, w=%d" % (self.aindex, self.rindex, self.windex)
+    def add(self,seq):
+       later = float(self.rto)+float(self.getsimtime())
+       self.r.zadd(self.queue,str(seq),str(later))
 
-  def remove(self,count):
-     for i in range(0,count):
-        self.r.lpop(self.abuffer)
+    def add2(self,seq):
+       later = float(self.rto)+float(self.getsimtime())
+       self.r.zadd(self.queue2,str(seq),str(later))
 
-  def move(self,count):
-     for i in range(0,count):
-        self.rpoplpush(self.abuffer,self.bbuffer)
 
-  def ack(self,val):
-     if val>self.rindex:
-        val=self.rindex
-     self.remove(val-self.aindex)
-     self.move(self.rindex-val)
-     self.rindex=self.aindex=val
+    def cleardown(self,threshseq):
+       tally=0
+       for seq,tick in self.r.zrangebyscore(self.queue, 0 ,str(100000),withscores=True):
+         if int(seq) <= int(threshseq):
+            status,size = self.remove(seq)
+            tally+=size
+       for seq,tick in self.r.zrangebyscore(self.queue2, 0 ,str(100000),withscores=True):
+         if int(seq) <= int(threshseq):
+            status,size =self.remove(seq)
+            tally+=size
+       return tally
+
+    def clearall(self):
+       for seq,tick in self.r.zrangebyscore(self.queue, 0 ,str(1000000000),withscores=True):
+           self.remove(seq)
+       for seq,tick in self.r.zrangebyscore(self.queue2, 0 ,str(1000000000),withscores=True):
+           self.remove(seq)
+
 
 

@@ -88,7 +88,10 @@ class connector(process):
       while self.isactive():
          timlock=self.lock()
 #         bps=self.getbps(self.name)
-         self.qsize=max(self.a.qsize(),self.qsize)
+         try:
+            self.qsize=max(self.a.qsize(),self.qsize)
+         except:
+            self.qsize=self.a.qsize()
          self.updatebps(self.name,0)
          self.unlock(timlock)
 #         print self.name,self.getsimtime(),bps,self.qsize
