@@ -6,7 +6,13 @@ class duplex2(duplex):
       super(duplex2, self).__init__(*args, **kwargs)
       self.pcapw=PcapWriter(self.name+'.pcap')
 
-   def inspect(self,stream,name):
+   def inspectA(self,stream,name):
+      frame=Ether(stream.decode("HEX"))
+      frame.time=float(self.nw())
+      self.pcapw.write(frame)
+      return stream
+
+   def inspectB(self,stream,name):
       frame=Ether(stream.decode("HEX"))
       frame.time=float(self.nw())
       self.pcapw.write(frame)
@@ -17,9 +23,14 @@ class transmission(duplex2):
       super(transmission, self).__init__(*args, **kwargs)
       self.pcapw=PcapWriter(self.name+'.pcap')
 
-   def inspect(self,stream,name):
+   def inspectA(self,stream,name):
 #      self.waitfor(0.050)
-      stream=super(transmission,self).inspect(stream,name)
+      stream=super(transmission,self).inspectA(stream,name)
+      return stream
+
+   def inspectB(self,stream,name):
+#      self.waitfor(0.050)
+      stream=super(transmission,self).inspectB(stream,name)
       return stream
 
 class udpgen(duplex2):

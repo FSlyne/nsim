@@ -205,7 +205,6 @@ class TCPSocket(process):
         self._send(flags="S")
 
     def _send_ack(self, flags="", load=None):
-        """We actually don't need to do much here!"""
         self._send(flags=flags + "A", load=load)
 
     def close(self):

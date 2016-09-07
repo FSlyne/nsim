@@ -1,6 +1,7 @@
 from tcp_listener import TCPListener
 from tcp_protocol import TCPSocket
 from queue import *
+from network import *
 from scapy.all import *
 
 class duplex2(duplex):
@@ -59,6 +60,7 @@ print conf.netcache.arp_cache
 
 sched=scheduler(tick=0.001,finish=10)
 
+router=ip_stack('router',capped=True)
 # node1=duplex2('node1',ratelimit=1000,MaxSize=100)
 node1=duplex2('node1')
 

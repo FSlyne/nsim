@@ -6,7 +6,7 @@ stack1 = stack('stack1')
 stack2 = stack('stack2')
 
 traf=trafgen('traf')
-sched.addp(traf.worker1,0.000,0.100)
+# sched.addp(traf.worker1,0.000,0.100)
 term2=terminal('term2')
 
 connect('linkA',traf.B,stack1.A)

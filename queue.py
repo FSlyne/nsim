@@ -103,7 +103,7 @@ class connector(process):
             time.sleep(0.01)
             continue
          item=self.a.get()
-         item=self.inspect(item,self.name)
+         item=self.inspect(item,self.name) # Careful about putting the inspect within the lock
          timlock=self.lock()
          self.updatebps(self.name,len(item)*8)
          if not self.b.put(item):
@@ -183,7 +183,6 @@ class connect(object):
    def inspect(self,item,name):
        return item
 
-
 class loopback(object):
    def __init__(self,name,X):
       connector(name+':connect1',X.outq,X.inq,self.inspect)
@@ -251,15 +250,18 @@ class duplex(process):
       self.b = Queue(name=self.name+':b',MaxSize=MaxSize)
       self.c = Queue(name=self.name+':c',MaxSize=MaxSize)
       self.d = Queue(name=self.name+':d',MaxSize=MaxSize)
-      connector(name+':link1',self.a,self.b,self.inspect,self.ratelimit) # a -> b, forward from interface A to interface B
-      connector(name+':link2',self.d,self.c,self.inspect,self.ratelimit) # c -> d, reverse from interface B to interface A
+      connector(name+':link1',self.a,self.b,self.inspectA,self.ratelimit) # a -> b, forward from interface A to interface B
+      connector(name+':link2',self.d,self.c,self.inspectB,self.ratelimit) # c -> d, reverse from interface B to interface A
 
       self.A=self.interface(name+':A',self.a,self.c,self) # a,c
       self.B=self.interface(name+':B',self.d,self.b,self) # d,b
 
       process.__init__(self,self.start)
 
-   def inspect(self,item,name):
+   def inspectA(self,item,name):
+      return item
+
+   def inspectB(self,item,name):
       return item
 
    class interface:
@@ -281,6 +283,13 @@ class duplex(process):
          item=self.outq.get()
          return item
 
+      def raw_put(self,stream):
+         self.put(stream.encode("HEX"))
+
+      def raw_get(self):
+         stream=self.get()
+         return stream.decode("HEX")
+
       def qsize(self):
          return self.outq.qsize()
 
@@ -296,7 +305,7 @@ class trafgen(duplex):
      while True:
        stime=self.waittick()
        timlock=self.lock()
-       self.A.put(b'N')
+       self.A.put('Hello')
        self.unlock(timlock)
 
    @threaded
