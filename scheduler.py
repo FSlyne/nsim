@@ -1,5 +1,6 @@
 import redis
 import time
+from utilities import *
 
 def threaded(fn):
     import threading
@@ -194,8 +195,10 @@ class process(object):
 #    self.r= redis.Redis(host=hostname,port=port )
     self.r = globalr
     self.now=now
+    self.mytick=0
     self.begin()
     self.debug=debug
+    self.alert=open("alert.log","a+")
 
   @threaded
   def begin(self):
@@ -244,16 +247,30 @@ class process(object):
     result,score=self.waiton(mylock,n)
     return result,score
 
-  def waitfor(self,n):
+  def waitfor2(self,n):
     result,score=self.waituntil(self.now+n)
     return result,score
+
+  def waitfor(self,n):
+    if n <= 0:
+       return
+    for i in range(0,n):
+       self.waittick()
 
   def waittick(self):
     key=self.gettoken()
     self.r.zadd('ticks',str(key),str(0))
     result,score=self.r.blpop(key)
     self.release(key)
-    return self.getsimtime()
+#    timlock=self.lock()
+    simtime=self.getsimtime()
+    expect_tick = self.mytick+0.001
+    act_tick=float(simtime)
+    if not isclose(act_tick, expect_tick):
+      self.alert.write("%0.3f %s Missed Clock tick: %0.3f\n" % (act_tick,self.name,expect_tick))
+    self.mytick =act_tick
+#    self.unlock(timlock)
+    return simtime
 
   def waitsectick(self):
     key=self.gettoken()
@@ -279,7 +296,8 @@ class process(object):
   def lock(self):
     timlock=self.gettoken()
     self.r.sadd('timlock',str(timlock))
-    return timlock
+    now=self.getsimtime()
+    return timlock,now
 
   def unlock(self,timlock):
     try:

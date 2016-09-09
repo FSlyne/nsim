@@ -50,7 +50,7 @@ class udpgen(duplex2):
             if float(stime) > float(self.stop):
                time.sleep(0.1)
                break
-         timlock=self.lock()
+         timlock,now=self.lock()
          pcount+=1
          payload="%d:%s" % (pcount,stime)
          frame=Ether()/IP()/UDP()/payload
@@ -63,7 +63,7 @@ class udpgen(duplex2):
    def worker2(self):
       while True:
          item=self.A.get()
-         timlock=self.lock()
+         timlock,now=self.lock()
          eth=Ether(item.decode("HEX"))
          ip=eth[IP]
          udp=ip[UDP]
@@ -79,7 +79,7 @@ class udpterm(duplex2):
    def worker(self):
       while True:
          stream=self.B.get()
-         timlock=self.lock()
+         timlock,now=self.lock()
          eth=Ether(stream.decode("HEX"))
          ip=eth[IP]
          udp=ip[UDP]

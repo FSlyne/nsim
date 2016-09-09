@@ -42,7 +42,7 @@ class tcpgen(duplex2):
             if float(stime) > float(self.stop):
                time.sleep(0.1)
                continue
-         timlock=self.lock()
+         timlock,now=self.lock()
          pcount+=1
          payload="%d:%s" % (pcount,stime)
          seq=seq+1; my_ack=my_ack+len(payload)
@@ -61,7 +61,7 @@ class tcpterm(duplex2):
    @threaded
    def worker(self):
       stream=self.B.get()
-      timlock=self.lock()
+      timlock,now=self.lock()
       eth=Ether(stream.decode("HEX"))
       ip=eth[IP]
       syn=ip[TCP]
@@ -72,7 +72,7 @@ class tcpterm(duplex2):
       self.unlock(timlock)
       while True:
          stream=self.B.get()
-         timlock=self.lock()
+         timlock,now=self.lock()
          eth=Ether(stream.decode("HEX"))
          ip=eth[IP]
          psh=ip[TCP]

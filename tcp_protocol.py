@@ -88,7 +88,7 @@ class TCPSocket(process):
 
     # congestion states: slow start =0, congestion avoid = 1, fast recovery = 2
     def congestion_mgr(self,typ=0): # 0 = timeout, 1 = dup, 2 = non-dup, 3 = double-dup
-       lock=self.lock()
+       lock,now=self.lock()
        cong=self.congestion_state; ssthresh = self.ssthresh; window = self.window
        if self.use_fastretransmit:
           if self.congestion_state == 0: # slow start
@@ -230,7 +230,7 @@ class TCPSocket(process):
 
     def handle(self, packet):
         # Handle incoming packets
-        lock=self.lock()
+        lock,now=self.lock()
         if self.last_ack_sent and self.last_ack_sent != packet.seq:
             if self.debug:
                print "+++++++ Handle Dropping Packet ++++++"
@@ -315,7 +315,7 @@ class TCPSocket(process):
     @threaded
     def ackmgr(self):
       while True:
-        lock=self.lock()
+        lock,now=self.lock()
         x=[]; y=[]
         l = self.r.keys(pattern="ack:"+self.xid+":*")
         l.sort()

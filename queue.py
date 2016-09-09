@@ -5,6 +5,8 @@ import sys
 import inspect
 import redis
 from scheduler import *
+from utilities import *
+from scapy.all import *
 
 debug=True
 
@@ -15,14 +17,84 @@ r = redis.Redis(
     host=hostname,
     port=port )
 
+class LatencyQueue(process):
+  import string
+  import random
+  def __init__(self,name='queue',ival=0.001,MaxSize=0,ratio=1,latency=0):
+    self.latency=latency 
+    self.size=0
+    self.ival=ival
+    self.MaxSize = MaxSize
+    self.name=name
+    self.ratio = ratio
+    self.queuename="queue:"+self.randtoken()+":("+self.name+")"
+    self.latencyqueue="latqueue:"+self.randtoken()+":("+self.name+")"
+#    self.r=redis.Redis(host=hostname,port=port )
+    self.counter=1
+#    self.lat_manager()
+    process.__init__(self,0)
+    if latency>0:
+       self.lat_manager()
+
+  def randtoken(self,size=10, chars=string.ascii_uppercase + string.digits):
+    return ''.join(self.random.choice(chars) for _ in range(size))
+
+  @threaded
+  def lat_manager(self):
+    while True:
+      t=self.waittick()
+      lock,now=self.lock()
+      ulimit=float(t)*1000+1
+      for item,score in r.zrangebyscore(self.latencyqueue, 0 ,ulimit ,withscores=True):
+#        if self.name == 'link1:a' or self.name == 'link1:b' :
+#           print "LQ:",self.name,ulimit,score,str(Ether(item.decode('HEX'))[UDP].payload).split(':')[1]
+        if r.zrem(self.latencyqueue, item) == 1:
+           self.size+=len(item)
+           r.rpush(self.queuename, item)
+      self.unlock(lock)
+
+  def put(self,item):
+    if self.MaxSize > 0:
+       if self.qsize() > self.MaxSize:
+          return False
+    if self.latency > 0:
+       futuretime=(float(self.getsimtime())*1000+self.latency)/1000
+       timestamp="%0.4f%06d" % (futuretime,self.counter); self.counter+=1
+       timestamp=float(timestamp)*1000
+       r.zadd(self.latencyqueue,item,timestamp)
+    else:
+       self.size+=len(item)
+       r.rpush(self.queuename, item)
+    return True
+
+  def get(self, block=True, timeout=None):
+    if block:
+       item = r.blpop(self.queuename, timeout=timeout)
+    else:
+       item = r.lpop(self.queuename)
+    if item:
+       item = item[1]
+    self.size=self.size-len(item)
+    return item
+
+  def qsize(self):
+    # ratio is ratio of actual bytes to application bytes
+    return int(self.size/self.ratio)
+
+  def empty(self):
+    return self.qsize() == 0
+
+
 class Queue():
   import string
   import random
 
-  def __init__(self,name='queue',ival=0.001,MaxSize=0):
+  def __init__(self,name='queue',ival=0.001,MaxSize=0,ratio=1):
     self.ival=ival
     self.MaxSize = MaxSize
     self.name=name
+    self.ratio = ratio
+    self.size=0
     self.queuename="queue:"+self.randtoken()+":("+self.name+")"
 
   def randtoken(self,size=6, chars=string.ascii_uppercase + string.digits):
@@ -33,6 +105,7 @@ class Queue():
        if self.qsize() > self.MaxSize:
           return False
     r.rpush(self.queuename, item)
+    self.size+=len(item)
     return True
 
   def get(self, block=True, timeout=None):
@@ -42,13 +115,15 @@ class Queue():
        item = r.lpop(self.queuename)
     if item:
        item = item[1]
+    self.size=self.size=len(item)
     return item
 
   def qsize(self):
-    return r.llen(self.queuename)
+    # ratio is ratio of actual bytes to application bytes
+    return int(self.size/self.ratio)
 
   def empty(self):
-    return r.qsize() == 0
+    return self.qsize() == 0
 
 def threaded(fn):
     def wrapper(*args, **kwargs):
@@ -62,22 +137,23 @@ def debug(line):
       print line
 
 class connector(process):
-   def __init__(self,name,a,b,inspect,ratelimit=0):
+   def __init__(self,name,a,b,inspect,ratelimit=0,ratio=1):
       self.a = a
       self.b = b
       self.name = name
+      self.ratio = ratio
       self.inspect=inspect
       self.ratelimit=ratelimit
+      self.qsize=0
       process.__init__(self,0)
       self.worker()
-      self.qsize=0
       self.statscollector()
 
    @threaded
    def statscollector(self):
       while True:
          simtime=self.waitsectick()
-         timlock=self.lock()
+         timlock,now=self.lock()
          root=self.name+':'+simtime+':'
          self.writedb(root+'bps',self.getbps(self.name))
          self.writedb(root+'qsize',self.qsize); self.qsize=0
@@ -86,7 +162,7 @@ class connector(process):
    @threaded
    def worker(self):
       while self.isactive():
-         timlock=self.lock()
+         timlock,now=self.lock()
 #         bps=self.getbps(self.name)
          try:
             self.qsize=max(self.a.qsize(),self.qsize)
@@ -102,12 +178,15 @@ class connector(process):
          if self.ratelimit > 0 and self.getbps(self.name) > self.ratelimit: # Rate Limit
             time.sleep(0.01)
             continue
+#         timlock,now=self.lock()
          item=self.a.get()
          item=self.inspect(item,self.name) # Careful about putting the inspect within the lock
-         timlock=self.lock()
-         self.updatebps(self.name,len(item)*8)
+
+         self.updatebps(self.name,len(item)*8/self.ratio) # 2 chars = 8 bits
+
          if not self.b.put(item):
             print "Dropping Packets"
+
          self.unlock(timlock)
 
 class xhub(object):
@@ -240,18 +319,26 @@ class stack(object):
 
 
 class duplex(process):
-   def __init__(self, name,ival=0.001,start=0,stop=0,ratelimit=0,MaxSize=0):
+   def __init__(self, name,ival=0.001,start=0,stop=0,ratelimit=0,MaxSize=0,ratio=1,latency=0):
       self.name = name
       self.ival = ival
       self.start = start
       self.stop = stop
       self.ratelimit = ratelimit
-      self.a = Queue(name=self.name+':a',MaxSize=MaxSize)
-      self.b = Queue(name=self.name+':b',MaxSize=MaxSize)
-      self.c = Queue(name=self.name+':c',MaxSize=MaxSize)
-      self.d = Queue(name=self.name+':d',MaxSize=MaxSize)
-      connector(name+':link1',self.a,self.b,self.inspectA,self.ratelimit) # a -> b, forward from interface A to interface B
-      connector(name+':link2',self.d,self.c,self.inspectB,self.ratelimit) # c -> d, reverse from interface B to interface A
+      self.latency = latency
+      if latency > 0:
+         self.a = LatencyQueue(name=self.name+':a',MaxSize=MaxSize,ratio=ratio,latency=latency/2) # ratio of stored bytes to application bytes
+         self.b = LatencyQueue(name=self.name+':b',MaxSize=MaxSize,ratio=ratio,latency=latency/2)
+         self.c = LatencyQueue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio,latency=latency/2)
+         self.d = LatencyQueue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio,latency=latency/2)
+      else:
+         self.a = Queue(name=self.name+':a',MaxSize=MaxSize,ratio=ratio) # ratio of stored bytes to application bytes
+         self.b = Queue(name=self.name+':b',MaxSize=MaxSize,ratio=ratio)
+         self.c = Queue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio)
+         self.d = Queue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio)
+
+      connector(name+':link1',self.a,self.b,self.inspectA,self.ratelimit,ratio=ratio) # a -> b, forward from interface A to interface B
+      connector(name+':link2',self.d,self.c,self.inspectB,self.ratelimit,ratio=ratio) # c -> d, reverse from interface B to interface A
 
       self.A=self.interface(name+':A',self.a,self.c,self) # a,c
       self.B=self.interface(name+':B',self.d,self.b,self) # d,b
@@ -295,39 +382,58 @@ class duplex(process):
 
 class trafgen(duplex):
    def __init__(self, *args, **kwargs):
+      self.Mbps=kwargs.get('speed',1) # Mbps
+      if 'speed' in kwargs:
+         del kwargs['speed']
       super(trafgen, self).__init__(*args, **kwargs)
+
+      self.bpms = self.Mbps*1000
+      self.size = size = 500
+
+      process.__init__(self,0)
 
       self.worker1()
       self.worker2()
 
    @threaded
    def worker1(self):
+     count=1
+     self.payload=randPayload(self.size)
      while True:
        stime=self.waittick()
-       timlock=self.lock()
-       self.A.put('Hello')
+       bits=0
+       timlock,now=self.lock()
+       while True:
+          load='%d:%s:%s'%(count,now,self.payload)
+          loadbits=len(load)*8
+          if bits+loadbits <= self.bpms:
+             bits+=loadbits
+             self.A.put(load); count+=1
+          else:
+             break 
        self.unlock(timlock)
 
    @threaded
    def worker2(self):
       while True:
          item=self.A.get()
-         timlock=self.lock()
+         timlock,now=self.lock()
          self.logwrite("%s %s" % (self.name,item))
          self.unlock(timlock)
 
 class terminal(duplex):
    def __init__(self, *args, **kwargs):
       super(terminal, self).__init__(*args, **kwargs)
+      process.__init__(self,0)
       self.worker()
 
    @threaded
    def worker(self):
       while True:
          item=self.B.get()
-         timlock=self.lock()
-#         time.sleep(0.1)
-         item="Bounce '%s'" % (str(item))
+         timlock,now=self.lock()
+         count,sendnow,payload=item.split(':') 
+         item="Traffic Return: '%s:%s:%s'" % (str(count),str(sendnow),str(now))
          self.B.put(item)
          self.unlock(timlock)
 
