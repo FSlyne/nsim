@@ -34,6 +34,7 @@ class TCPSocket(process):
         self.seq = 1234
         self.ackvol=0
         self.last_ack_sent = 0
+        self.name="TCPsocket"
         process.__init__(self,0)
         self.actual_ack = 0
         self.r = redis.Redis(host=host,port=port )
@@ -160,7 +161,7 @@ class TCPSocket(process):
              diff = len(payload)+self.seq - self.last_ack_recv
              # don't send if self.seq > self.last_ack_recv + min(cwnd, rwnd)
              if len(payload)+self.seq - self.last_ack_recv >= self.window*1.4:
-                self.waitfor(0.001)
+                self.waitfor(1)
              else:
 #                print "++++",self.seq,self.window,diff
                 break
@@ -291,10 +292,10 @@ class TCPSocket(process):
         # Block
         while self.state != "ESTABLISHED":
 #            time.sleep(0.001)
-            self.waitfor(0.001)
+            self.waitfor(1)
         # Do the actual send
         self.r.rpush("inbuf:"+self.xid,str(payload))
-#        self.waitfor(0.001)
+#        self.waitfor(1)
 #        self._send_ack(load=payload, flags="P")
 
 
@@ -302,8 +303,8 @@ class TCPSocket(process):
         start_time = time.time()
         # Block until the connection is closed
         while len(self.recv_buffer) < size:
-            self.waitfor(0.001)
-#            time.sleep(0.001)
+            self.waitfor(1)
+#            time.sleep(1)
             if self.state in ["CLOSED", "LAST-ACK"]:
                 break
             if timeout < (time.time() - start_time):
@@ -348,7 +349,7 @@ class TCPSocket(process):
 #                    print "deleting:", "ack:"+self.xid+":"+"%010d" % seq
                     self.r.delete("ack:"+self.xid+":"+"%010d" % seq)
         self.unlock(lock)
-        self.waitfor(0.005)
+        self.waitfor(5)
 
 class retransmission(process):
     def __init__(self,callback='',congmgr='',xid='',queue='retransmission',rto=3.000):
@@ -360,6 +361,7 @@ class retransmission(process):
        self.gap = rto*0.9
        self.callback=callback
        self.congmgr=congmgr
+       self.name='tcpretransmission'
        process.__init__(self,0)
        self.routine()
        self.routine2()
@@ -373,7 +375,7 @@ class retransmission(process):
              self.remove(seq)
              self.add2(seq)
           else:
-             self.waitfor(0.005)
+             self.waitfor(5)
 
     @threaded
     def routine2(self):
@@ -384,7 +386,7 @@ class retransmission(process):
              self.remove2(seq)
 #             self.add(seq)
           else:
-             self.waitfor(0.005)
+             self.waitfor(5)
 
     def remove(self,seq):
        try:

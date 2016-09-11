@@ -2,7 +2,6 @@ from tcp_listener import TCPListener
 from tcp_protocol import TCPSocket
 from queue import *
 from scapy.all import *
-from network import *
 
 class duplex2(duplex):
    def __init__(self, *args, **kwargs):
@@ -37,7 +36,7 @@ class tcpgen(duplex2):
       for i in range(1,5000):
          stime=self.waittick()
          self.conn.send("A"*250)
-      self.waitfor(9000)
+      self.waitfor(9.999)
       print "closing"
       self.conn.close()
                
@@ -61,29 +60,14 @@ print conf.netcache.arp_cache
 sched=scheduler(tick=0.001,finish=10)
 
 # node1=duplex2('node1',ratelimit=1000,MaxSize=100)
+node1=duplex2('node1')
 
 tcpxmit=tcpgen('tcpxmit',stop=3.0)
 
 tcprecv=tcpterm('tcprecv')
 
-# sw=eth_switch('sw')
-sw1=vswitch('sw1',"","Dot1Q()")
-sw2=vswitch('sw2',"Dot1Q()","MPLS()")
-sw3=vswitch('sw3',"MPLS()","")
-
-link=transmission('link1',latency=50,trace=True)
-
-traf=trafgen('traf',speed=1)
-term2=terminal('term2')
-
-connect('con3',tcpxmit.B,link.A)
-connect('con4',link.B,tcprecv.A)
-
-# connect('con3',tcpxmit.B,sw1.A)
-# connect('con4',sw1.B,sw2.A)
-# connect('lcon1',sw2.B,link.A)
-# connect('lcon2',link.B,sw3.A)
-# connect('con6',tcprecv.A,sw2.B)
+connect('con1',tcpxmit.B,node1.A)
+connect('con2',tcprecv.A,node1.B)
 
 sched.process()
 

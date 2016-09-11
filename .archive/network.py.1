@@ -183,4 +183,425 @@ class tcp_layer(object):
           return stream
 
 
+class router2(object):
+   def __init__(self,name):
+      self.layer1=eth_layer('ethernet_layer')
+      self.layer2=ip_layer('ip_layer')
+      self.A=self.layer1.A
+      self.B=self.layer1.B
+      self.C=self.layer2.C
+      self.D=self.layer2.D
+
+      connect('J1',self.layer1.C,self.layer2.A)
+      connect('J2',self.layer2.B,self.layer1.D)
+
+      connect('cap',self.layer2.C,self.layer2.D)
+
+class mplsswitch(object):
+   def __init__(self,name,labelA='',labelB=''):
+      self.layer1=eth_layer('ethernet_layer')
+      self.layer2=mpls_layer('mpls_layer',labelA,labelB)
+      self.A=self.layer1.A
+      self.B=self.layer1.B
+      self.C=self.layer2.C
+      self.D=self.layer2.D
+
+      connect('J1',self.layer1.C,self.layer2.A)
+      connect('J2',self.layer2.B,self.layer1.D)
+
+      connect('cap',self.layer2.C,self.layer2.D)
+
+class host2(object):
+   def __init__(self,name,stack='udp'):
+      self.block1=eth_block('ethernet_layer')
+      self.block2=ip_block('ip_layer')
+      if stack == 'udp':
+        self.block3=udp_block('udp_layer')
+      else:
+        self.block3=tcp_block('tcp_layer')
+      self.A=self.block1.A
+      self.B=self.block3.B
+
+      connect('J1',self.block1.B,self.block2.A)
+      connect('J2',self.block2.B,self.block3.A)
+
+
+class udp_stack(object):
+   def __init__(self,name,capped=False,based=False):
+      self.layer1=eth_layer('ethernet_layer')
+      self.layer2=ip_layer('ip_layer')
+      self.layer3=udp_layer('udp_layer')
+      self.A=self.layer1.A
+      self.B=self.layer1.B
+      self.C=self.layer3.C
+      self.D=self.layer3.D
+
+      connect('J1',self.layer1.C,self.layer2.A)
+      connect('J2',self.layer2.B,self.layer1.D)
+
+      connect('J3',self.layer2.C,self.layer3.A)
+      connect('J4',self.layer3.B,self.layer2.D)
+
+      if capped:
+         connect('cap',self.layer3.C,self.layer3.D)
+
+      if based:
+         connect('cap',self.layer1.B,self.layer1.A)
+
+class ip_stack(object):
+   def __init__(self,name,capped=False,based=False):
+      self.layer1=eth_layer('ethernet_layer')
+      self.layer2=ip_layer('ip_layer')
+      self.A=self.layer1.A
+      self.B=self.layer1.B
+      self.C=self.layer2.C
+      self.D=self.layer2.D
+
+      connect('J1',self.layer1.C,self.layer2.A)
+      connect('J2',self.layer2.B,self.layer1.D)
+
+      if capped:
+         connect('cap',self.layer2.C,self.layer2.D)
+
+      if based:
+         connect('cap',self.layer1.B,self.layer1.A)
+
+class eth_layer(object):
+   def __init__(self,name,upperlayer='ip'):
+      self.up=self.eth_up('up',upperlayer)
+      self.down=self.eth_down('down',upperlayer)
+      self.A=self.up.A
+      self.B=self.down.B
+      self.C=self.up.B
+      self.D=self.down.A
+
+  
+   class eth_up(duplex):
+       def __init__(self,*args, **kwargs):
+          self.upperlayer = kwargs.get('upperlayer')
+          del kwargs['upperlayer']
+          duplex.__init__(self,'name')
+
+       def inspectA(self,stream,name):
+          stream=stream.decode("HEX")
+          if self.upperlayer == 'ip':
+             stream=Ether(stream)[IP]
+          else:
+             stream=Ether(stream)[MPLS]
+          stream=str(stream).encode("HEX")
+          return stream
+
+       def inspectB(self,stream,name):
+          stream=stream.decode("HEX")
+          if self.upperlayer == 'ip':
+             stream=Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')/IP(stream)
+          else:
+             stream=Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')/MPLS(stream)
+          stream=str(stream).encode("HEX")
+          return stream
+
+   class eth_down(duplex):
+       def __init__(self,*args, **kwargs):
+          self.upperlayer = kwargs.get('upperlayer')
+          del kwargs['upperlayer']
+          duplex.__init__(self,'name')
+
+       def inspectA(self,stream,name):
+          stream=stream.decode("HEX")
+          if self.upperlayer == 'ip':
+             stream=Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')/IP(stream)
+          else:
+             stream=Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')/MPLS(stream)
+          stream=str(stream).encode("HEX")
+          return stream
+
+       def inspectB(self,stream,name):
+          stream=stream.decode("HEX")
+          if self.upperlayer == 'ip':
+             stream=Ether(stream)[IP]
+          else:
+             stream=Ether(stream)[MPLS]
+          stream=str(stream).encode("HEX")
+          return stream
+
+class eth_block(object):
+   def __init__(self,name):
+      self.up=self.eth_up('up')
+      self.A=self.up.A
+      self.B=self.up.B
+
+   class eth_up(duplex):
+       def inspectA(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=Ether(stream)[IP]
+          stream=str(stream).encode("HEX")
+          return stream
+
+       def inspectB(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')/IP(stream)
+          stream=str(stream).encode("HEX")
+          return stream
+
+class ip_block(object):
+   def __init__(self,name):
+      self.up=self.ip_up('up')
+      self.A=self.up.A
+      self.B=self.up.B
+
+
+   class ip_up(duplex):
+       def inspectA(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=IP(stream)[UDP]
+          stream=str(stream).encode("HEX")
+          return stream
+
+       def inspectB(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=IP()/UDP(stream)
+          stream=str(stream).encode("HEX")
+          return stream
+
+class udp_block(object):
+   def __init__(self,name):
+      self.up=self.udp_up('up')
+      self.A=self.up.A
+      self.B=self.up.B
+
+   class udp_up(duplex):
+       def inspectA(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=UDP(stream)
+          stream=stream.payload
+          return stream
+
+       def inspectB(self,stream,name):
+#          stream=stream.decode("HEX")
+          stream=UDP()/stream
+          stream=str(stream).encode("HEX")
+          return stream
+
+class tcp_block(object):
+   def __init__(self,name):
+      self.up=self.tcp_up('up')
+      self.A=self.up.A
+      self.B=self.up.B
+
+   class tcp_up(duplex):
+       def inspectA(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=TCP(stream)
+          stream=stream.payload
+          return stream
+
+       def inspectB(self,stream,name):
+#          stream=stream.decode("HEX")
+          stream=TCP()/stream
+          stream=str(stream).encode("HEX")
+          return stream
+
+
+class tcp_layer(object):
+   def __init__(self,name):
+      self.up=self.tcp_up('up')
+      self.A=self.up.A
+      self.B=self.up.B
+
+   class tcp_up(duplex):
+       def inspectA(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=TCP(stream)
+          stream=stream.payload
+          return stream
+
+       def inspectB(self,stream,name):
+#          stream=stream.decode("HEX")
+          stream=TCP()/stream
+          stream=str(stream).encode("HEX")
+          return stream
+
+class mpls_layer(object):
+   def __init__(self,name,labelA,labelB):
+      self.up=self.mpls_up('up',labelA=labelA,labelB=labelB)
+
+      self.down=self.mpls_down('down',labelA=labelA,labelB=labelB)
+      self.A=self.up.A
+      self.B=self.down.B
+      self.C=self.up.B
+      self.D=self.down.A
+
+   class mpls_up(duplex):
+       def __init__(self,*args, **kwargs):
+          self.labelA = kwargs.get('labelA',234)
+          self.labelB = kwargs.get('labelB',456)
+          del kwargs['labelA']
+          del kwargs['labelB']
+#          super(mpls_layer.mpls_up, self).__init__(*args, **kwargs)
+          duplex.__init__(self,'name')
+  
+       def inspectA(self,stream,name):
+          try:
+            stream=stream.decode("HEX")
+            if self.labelA:
+              stream=MPLS(stream)[IP]
+            else:
+              stream=Ether(stream)[IP]
+            stream=str(stream).encode("HEX")
+          except:
+            print "Exception: ",stream
+          return stream
+
+       def inspectB(self,stream,name):
+          try:
+            stream=stream.decode("HEX")
+            if self.labelA:
+               stream=MPLS()/IP(stream)
+            else: 
+               stream=Ether()/IP(stream)
+            stream=str(stream).encode("HEX")
+          except:
+            print "Exception: ",stream
+          return stream
+
+   class mpls_down(duplex):
+       def __init__(self,*args, **kwargs):
+          self.labelA = kwargs.get('labelA',234)
+          self.labelB = kwargs.get('labelB',456)
+          del kwargs['labelA']
+          del kwargs['labelB']
+#          super(mpls_layer.mpls_up, self).__init__(*args, **kwargs)
+          duplex.__init__(self,'name')
+
+       def inspectA(self,stream,name):
+          try:
+            stream=stream.decode("HEX")
+            if self.labelA:
+               stream=MPLS()/IP(stream)
+            else:
+               stream=Ether()/IP(stream)
+            stream=str(stream).encode("HEX")
+          except:
+            print "Exception: ",stream
+          return stream
+
+       def inspectB(self,stream,name):
+          try:
+            stream=stream.decode("HEX")
+            if self.labelA:
+              stream=MPLS(stream)[IP]
+            else:
+              stream=Ether(stream)[IP]
+            stream=str(stream).encode("HEX")
+          except:
+            print "Exception: ",stream
+          return stream
+
+
+class ip_layer(object):
+   def __init__(self,name):
+      self.up=self.ip_up('up')
+      self.down=self.ip_down('down')
+      self.A=self.up.A
+      self.B=self.down.B
+      self.C=self.up.B
+      self.D=self.down.A
+
+
+   class ip_up(duplex):
+       def inspectA(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=IP(stream)[UDP]
+          stream=str(stream).encode("HEX")
+          return stream
+
+       def inspectB(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=IP()/UDP(stream)
+          stream=str(stream).encode("HEX")
+          return stream
+
+   class ip_down(duplex):
+       def inspectB(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=IP(stream)[UDP]
+          stream=str(stream).encode("HEX")
+          return stream
+
+       def inspectA(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=IP()/UDP(stream)
+          stream=str(stream).encode("HEX")
+          return stream
+
+class udp_layer(object):
+   def __init__(self,name):
+      self.up=self.udp_up('up')
+      self.down=self.udp_down('down')
+      self.A=self.up.A
+      self.B=self.down.B
+      self.C=self.up.B
+      self.D=self.down.A
+
+   class udp_up(duplex):
+       def inspectA(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=UDP(stream)
+          stream=stream.payload
+          return stream
+
+       def inspectB(self,stream,name):
+#          stream=stream.decode("HEX")
+          stream=UDP()/stream
+          stream=str(stream).encode("HEX")
+          return stream
+
+   class udp_down(duplex):
+       def inspectB(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=UDP(stream)
+          stream=stream.payload
+          return stream
+
+       def inspectA(self,stream,name):
+#          stream=stream.decode("HEX")
+          stream=UDP()/stream
+          stream=str(stream).encode("HEX")
+          return stream
+
+class tcp_layer(object):
+   def __init__(self,name):
+      self.up=self.tcp_up('up')
+      self.down=self.tcp_down('down')
+      self.A=self.up.A
+      self.B=self.down.B
+      self.C=self.up.B
+      self.D=self.down.A
+
+   class tcp_up(duplex):
+       def inspectA(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=TCP(stream)
+          stream=stream.payload
+          return stream
+
+       def inspectB(self,stream,name):
+#          stream=stream.decode("HEX")
+          stream=TCP()/stream
+          stream=str(stream).encode("HEX")
+          return stream
+
+   class udp_down(duplex):
+       def inspectB(self,stream,name):
+          stream=stream.decode("HEX")
+          stream=TCP(stream)
+          stream=stream.payload
+          return stream
+
+       def inspectA(self,stream,name):
+#          stream=stream.decode("HEX")
+          stream=TCP()/stream
+          stream=str(stream).encode("HEX")
+          return stream
+
 

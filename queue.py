@@ -385,6 +385,9 @@ class trafgen(duplex):
       self.Mbps=kwargs.get('speed',1) # Mbps
       if 'speed' in kwargs:
          del kwargs['speed']
+      self.once=kwargs.get('once',0) # Mbps
+      if 'once' in kwargs:
+         del kwargs['once']
       super(trafgen, self).__init__(*args, **kwargs)
 
       self.bpms = self.Mbps*1000
@@ -392,7 +395,10 @@ class trafgen(duplex):
 
       process.__init__(self,0)
 
-      self.worker1()
+      if self.once > 0:
+        self.worker3()
+      else:
+        self.worker1()
       self.worker2()
 
    @threaded
@@ -420,6 +426,17 @@ class trafgen(duplex):
          timlock,now=self.lock()
          self.logwrite("%s %s" % (self.name,item))
          self.unlock(timlock)
+         
+   @threaded
+   def worker3(self):
+     count=1
+     self.payload=randPayload(self.size)
+     stime=self.waittick()
+     bits=0
+     timlock,now=self.lock()
+     load='%d:%s:%s'%(count,now,self.payload)
+     self.A.put(load)
+     self.unlock(timlock)
 
 class terminal(duplex):
    def __init__(self, *args, **kwargs):
