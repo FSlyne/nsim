@@ -155,7 +155,7 @@ class connector(process):
          simtime=self.waitsectick()
          timlock,now=self.lock()
          root=self.name+':'+simtime+':'
-         self.writedb(root+'bps',self.getbps(self.name))
+         self.writedb(root+'bps',self.getstats(self.name,'bits'))
          self.writedb(root+'qsize',self.qsize); self.qsize=0
          self.unlock(timlock)
 
@@ -168,24 +168,24 @@ class connector(process):
             self.qsize=max(self.a.qsize(),self.qsize)
          except:
             self.qsize=self.a.qsize()
-         self.updatebps(self.name,0)
+         self.updatestats(self.name,0,'bits')
          self.unlock(timlock)
 #         print self.name,self.getsimtime(),bps,self.qsize
          if self.b.MaxSize > 0 and self.b.qsize() >= self.b.MaxSize: # Back Pressure
             time.sleep(0.01)
             print "Back Pressure", self.b.qsize(), self.b.MaxSize
             continue
-         if self.ratelimit > 0 and self.getbps(self.name) > self.ratelimit: # Rate Limit
+         if self.ratelimit > 0 and self.getstats(self.name,'bits') > self.ratelimit: # Rate Limit
             time.sleep(0.01)
             continue
 #         timlock,now=self.lock()
          item=self.a.get()
          item=self.inspect(item,self.name) # Careful about putting the inspect within the lock
 
-         self.updatebps(self.name,len(item)*8/self.ratio) # 2 chars = 8 bits
+         self.updatestats(self.name,len(item)*8/self.ratio,'bits') # 2 chars = 8 bits
 
          if not self.b.put(item):
-            print "Dropping Packets"
+            self.updatestats(self.name,1,'pktdrp')
 
          self.unlock(timlock)
 
@@ -474,21 +474,4 @@ class terminal(duplex):
          item="Traffic Return: '%s:%s:%s'" % (str(count),str(sendnow),str(now))
          self.B.put(item)
          self.unlock(timlock)
-
-#sched=scheduler(tick=0.001,finish=10)
-
-# node1=duplex('node1')
-#stack1 = stack('stack1')
-#stack2 = stack('stack2')
-
-
-#traf=trafgen('traf')
-#sched.addp(traf.worker1,0.000,0.100)
-#term2=terminal('term2')
-
-#connect('linkA',traf.B,stack1.A)
-#connect('linkB',stack1.B,stack2.A)
-#connect('linkC',stack2.B,term2.A)
-
-#sched.process()
 

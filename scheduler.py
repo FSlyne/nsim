@@ -22,6 +22,7 @@ globalr = redis.Redis(connection_pool=pool )
 #    port=port )
 
 class scheduler(object):
+   import random
    def __init__(self, tick=1,wait=0,debug=0,finish=0):
       self.finish = finish
       self.tick = tick 
@@ -40,6 +41,7 @@ class scheduler(object):
       self.setactive()
       self.dbg=debug
       self.logreader()
+      self.calcstats()
       self.plist=[] # functions to call back
 
    def setactive(self):
@@ -189,6 +191,88 @@ class scheduler(object):
       while True:
          print self.r.blpop("Logger")[1]
 
+   def gettoken(self):
+     key=self.randtoken()
+     return(key)
+
+   def release(self,key):
+     self.r.delete(key)
+
+   def waittick(self):
+     key=self.gettoken()
+     self.r.zadd('ticks',str(key),str(0))
+     result,score=self.r.blpop(key)
+     self.release(key)
+     simtime=self.simtime()
+     return simtime
+
+   def waitsectick(self):
+     key=self.gettoken()
+     self.r.zadd('secticks',str(key),str(0))
+     result,score=self.r.blpop(key)
+     self.release(key)
+     return str(int(float(self.simtime)))
+
+   def wait10mstick(self):
+     key=self.gettoken()
+     self.r.zadd('10msticks',str(key),str(0))
+     result,score=self.r.blpop(key)
+     self.release(key)
+     return str(int(float(self.simtime)))
+
+   def wait100mstick(self):
+     key=self.gettoken()
+     self.r.zadd('100msticks',str(key),str(0))
+     result,score=self.r.blpop(key)
+     self.release(key)
+     return str(int(float(self.simtime)))
+
+   def randtoken(self,size=6, chars=string.ascii_uppercase + string.digits):
+     return ''.join(self.random.choice(chars) for _ in range(size))
+
+   def lock(self):
+     timlock=self.gettoken()
+     self.r.sadd('timlock',str(timlock))
+     now=self.simtime
+     return timlock,now
+
+   def unlock(self,timlock):
+     try:
+        self.r.srem('timlock',str(timlock))
+     except:
+        pass
+
+
+   @threaded
+   def calcstats(self):
+      while True:
+         simtime=self.waitsectick()
+         timlock,now=self.lock()
+         l = self.r.keys(pattern='stats:*')
+         m=[]
+         for e in l:
+            w=e.split(':')[:-1]
+            w=":".join(w)
+            m.append(w)
+         for e in m:
+            tally=0
+            pattern=e+":*"
+            l=self.r.keys(pattern)
+            l.sort()
+            l=l[-10:] # get the last 10 keys
+            for f in l:
+               try:
+                  b = self.r.get(f)
+                  tally+=int(b)
+               except:
+                  pass
+            f=e.split(':')
+            unit=f[0]+'ps:'+f[1]+'ps:'+":".join(f[2:])+':'+simtime
+            self.r.set(unit,tally)
+         self.unlock(timlock)
+      return
+
+
 class process(object):
   import string
   import random
@@ -308,10 +392,10 @@ class process(object):
     self.r.set(attr,str(value))
 
 
-  def updatebps(self,elem,bits): # bits
+  def updatestats(self,elem,bits,units): # bits
     val=float(self.r.get("simbuck"))
     fval = "%08.1f" % val
-    cursec='bits:'+elem+':'+str(fval)
+    cursec="stats:"+units+':'+elem+':'+str(fval)
     try:
       curval=int(self.r.get(cursec))
       curval+=bits
@@ -322,9 +406,9 @@ class process(object):
     self.r.expire(cursec,100)
     return curval
 
-  def getbps(self,elem):
+  def getstats(self,elem,units):
     bits=0
-    pattern='bits:'+elem+':*'
+    pattern="stats:"+units+':'+elem+':*'
 #    l=list(self.r.scan_iter(match=pattern))
     l=self.r.keys(pattern)
     l.sort()
@@ -335,7 +419,7 @@ class process(object):
          bits+=int(b)    
        except:
          pass
-    self.r.set(elem+":now:bps",bits)
+    self.r.set("statsps:"+units+"ps:"+elem,bits)
     return bits
 
 

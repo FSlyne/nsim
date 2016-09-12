@@ -35,37 +35,37 @@ class datalink(duplex):
       super(datalink, self).__init__(*args, **kwargs)
 
    def inspectA(self,stream,name):
-#      timlock=self.lock()
+      timlock,now=self.lock()
       drop=False
       frame=Ether(stream.decode("HEX"))
       if not self.ber == 0:
          bits=len(frame)*8
          if packet_drop(bits,self.ber):
             drop=True
-            print "Dropping Packet"
+            self.updatestats(self.name,1,'pktdrp')
       if drop:
          stream=""
       elif self.trace:
          frame.time=float(self.nw())
          self.pcapw.write(frame)
-#      self.unlock(timlock)
+      self.unlock(timlock)
       return stream
 
    def inspectB(self,stream,name):
-#      timlock=self.lock()
+      timlock,now=self.lock()
       drop=False
       frame=Ether(stream.decode("HEX"))
       if not self.ber == 0:
          bits=len(frame)*8
          if packet_drop(bits,self.ber):
             drop=True
-            print "Dropping Packet"
+            self.updatestats(self.name,1,'pktdrp')
       if drop:
          stream="" 
       elif self.trace:
          frame.time=float(self.nw())
          self.pcapw.write(frame)
-#      self.unlock(timlock)
+      self.unlock(timlock)
       return stream
 
 
@@ -233,8 +233,11 @@ class host(object):
    class eth_up(duplex):
        def inspectA(self,stream,name):
           eth=Ether(stream.decode("HEX"))
-          ip=eth[IP]
-          udp=ip[UDP]
+          try:
+            ip=eth[IP]
+            udp=ip[UDP]
+          except:
+            return "Host Error"
 #          stream=str(payload).encode("HEX")
           return udp.payload
 

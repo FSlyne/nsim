@@ -3,6 +3,7 @@ import string
 import math
 
 def packet_drop(n_bits,err):
+   # https://asecuritysite.com/comms/bit_error
    p_error = pow(10,err)
    prob_no_error = pow(1-p_error,n_bits)
    prob_error = 1- prob_no_error
