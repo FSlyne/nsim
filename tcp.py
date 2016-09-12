@@ -44,7 +44,7 @@ sched=scheduler(tick=0.001,finish=10)
 tcpxmit=tcpgen('tcpxmit',stop=3.0)
 tcprecv=tcpterm('tcprecv')
 
-scenario=7
+scenario=1
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)
 
@@ -53,7 +53,7 @@ if scenario == 0:
   connect('con1',tcpxmit.B,sw.A)
   connect('con2',sw.B,tcprecv.A)
 elif scenario == 1:
-  link=datalink('link',latency=50,trace=True)
+  link=datalink('link',latency=50,trace=True,ber=-4)
   connect('con1',tcpxmit.B,link.A)
   connect('con2',link.B,tcprecv.A)
 elif scenario == 2:

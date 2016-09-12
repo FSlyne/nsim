@@ -10,7 +10,7 @@ host2=host('host2',stack='udp')
 traf=trafgen('traf',ms1=1)
 term2=terminal('term2')
 
-scenario=6
+scenario=1
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)
 
@@ -21,7 +21,7 @@ if scenario == 0:
   connect('con2',sw.B,host2.A)
   connect('hostcon2',host2.B,term2.A)
 elif scenario == 1:
-  link=datalink('link',latency=50,trace=True,debug=True)
+  link=datalink('link',latency=50,trace=True,debug=True,ber=-3)
   connect('hostcon1',host1.B,traf.B)
   connect('con1',host1.A,link.A)
   connect('con2',link.B,host2.A)

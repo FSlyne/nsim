@@ -1,5 +1,6 @@
 from queue import *
 from scapy.all import *
+from utilities import *
 
 class MPLS(Packet):
    name = "MPLS"
@@ -18,29 +19,53 @@ class datalink(duplex):
       self.name=args[0]
       self.capacity = kwargs.get('capacity',0) # Mbps
       self.trace = kwargs.get('trace',False) # turn on/off pcap tracing
+      self.ber = kwargs.get('ber',0) # 10^ber, ber negative
       if 'capacity' in kwargs:
          del kwargs['capacity']
       if 'trace' in kwargs:
          del kwargs['trace']
+      if 'ber' in kwargs:
+         del kwargs['ber']
       if self.trace:
          self.pcapw=PcapWriter(self.name+'.pcap')
       if self.capacity >0:
          kwargs['ratelimit'] = 1000000*self.capacity
+   
       kwargs['ratio'] = 2 # 2 chars in queue eqiv. 1 byte of application data
       super(datalink, self).__init__(*args, **kwargs)
 
    def inspectA(self,stream,name):
-      if self.trace:
-         frame=Ether(stream.decode("HEX"))
+#      timlock=self.lock()
+      drop=False
+      frame=Ether(stream.decode("HEX"))
+      if not self.ber == 0:
+         bits=len(frame)*8
+         if packet_drop(bits,self.ber):
+            drop=True
+            print "Dropping Packet"
+      if drop:
+         stream=""
+      elif self.trace:
          frame.time=float(self.nw())
          self.pcapw.write(frame)
+#      self.unlock(timlock)
       return stream
 
    def inspectB(self,stream,name):
-      if self.trace:
-         frame=Ether(stream.decode("HEX"))
+#      timlock=self.lock()
+      drop=False
+      frame=Ether(stream.decode("HEX"))
+      if not self.ber == 0:
+         bits=len(frame)*8
+         if packet_drop(bits,self.ber):
+            drop=True
+            print "Dropping Packet"
+      if drop:
+         stream="" 
+      elif self.trace:
          frame.time=float(self.nw())
          self.pcapw.write(frame)
+#      self.unlock(timlock)
       return stream
 
 
