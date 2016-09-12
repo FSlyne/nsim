@@ -335,6 +335,7 @@ class process(object):
          bits+=int(b)    
        except:
          pass
+    self.r.set(elem+":now:bps",bits)
     return bits
 
 

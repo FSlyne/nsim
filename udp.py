@@ -1,106 +1,67 @@
-from queue import *
 from scapy.all import *
+from network import *
 
-class duplex2(duplex):
-   def __init__(self, *args, **kwargs):
-      super(duplex2, self).__init__(*args, **kwargs)
-      self.pcapw=PcapWriter(self.name+'.pcap')
+sched=scheduler(tick=0.001,finish=10)
 
-   def inspectA(self,stream,name):
-      frame=Ether(stream.decode("HEX"))
-      frame.time=float(self.nw())
-      self.pcapw.write(frame)
-      return stream
 
-   def inspectB(self,stream,name):
-      frame=Ether(stream.decode("HEX"))
-      frame.time=float(self.nw())
-      self.pcapw.write(frame)
-      return stream
+host1=host('host1',stack='udp')
+host2=host('host2',stack='udp')
 
-class transmission(duplex2):
-   def __init__(self, *args, **kwargs):
-      super(transmission, self).__init__(*args, **kwargs)
-      self.pcapw=PcapWriter(self.name+'.pcap')
+traf=trafgen('traf',ms1=1)
+term2=terminal('term2')
 
-   def inspectA(self,stream,name):
-#      self.waitfor(0.050)
-      stream=super(transmission,self).inspectA(stream,name)
-      return stream
+scenario=6
 
-   def inspectB(self,stream,name):
-#      self.waitfor(0.050)
-      stream=super(transmission,self).inspectB(stream,name)
-      return stream
+# duplex2('node1',ratelimit=1000,MaxSize=100)
 
-class udpgen(duplex2):
-   def __init__(self, *args, **kwargs):
-      super(udpgen, self).__init__(*args, **kwargs)
-      self.worker1()
-      self.worker2()
-
-   
-
-   @threaded
-   def worker1(self):
-      pcount=0
-      while True:
-         stime=self.waittick()
-         if self.stop > 0:
-            if float(stime) > float(self.stop):
-               time.sleep(0.1)
-               break
-         timlock,now=self.lock()
-         pcount+=1
-         payload="%d:%s" % (pcount,stime)
-         frame=Ether()/IP()/UDP()/payload
-         stream=str(frame).encode("HEX")
-         self.A.put(stream)
-         self.logwrite("%s Sending %s" % (self.name,payload))
-         self.unlock(timlock)
-
-   @threaded
-   def worker2(self):
-      while True:
-         item=self.A.get()
-         timlock,now=self.lock()
-         eth=Ether(item.decode("HEX"))
-         ip=eth[IP]
-         udp=ip[UDP]
-         self.logwrite("%s Receiving %s" % (self.name,udp.payload))
-         self.unlock(timlock)
-
-class udpterm(duplex2):
-   def __init__(self, *args, **kwargs):
-      super(udpterm, self).__init__(*args, **kwargs)
-      self.worker()
-
-   @threaded
-   def worker(self):
-      while True:
-         stream=self.B.get()
-         timlock,now=self.lock()
-         eth=Ether(stream.decode("HEX"))
-         ip=eth[IP]
-         udp=ip[UDP]
-         item=stream
-         self.B.put(item)
-         self.unlock(timlock)
-
-sched=scheduler(tick=0.001,finish=500)
-
-node1=transmission('node1',MaxSize=1)
-# node1=duplex2('node1')
-
-# udpxmit=udpgen('udpxmit',stop=3.0,MaxSize=500)
-udpxmit=udpgen('udpxmt',stop=3.0)
-
-udprecv=udpterm('udprecv')
-
-# hub=xhub('hub',[udpxmit.B,udpxmit1.B,node1.A])
-
-connect('con1',udpxmit.B,node1.A)
-connect('con2',udprecv.A,node1.B)
+if scenario == 0:
+  sw=duplex('node1')
+  connect('hostcon1',host1.B,traf.B)
+  connect('con1',host1.A,sw.A)
+  connect('con2',sw.B,host2.A)
+  connect('hostcon2',host2.B,term2.A)
+elif scenario == 1:
+  link=datalink('link',latency=50,trace=True,debug=True)
+  connect('hostcon1',host1.B,traf.B)
+  connect('con1',host1.A,link.A)
+  connect('con2',link.B,host2.A)
+  connect('hostcon2',host2.B,term2.A)
+elif scenario == 2:
+  sw=eth_switch('sw')
+  connect('hostcon1',host1.B,traf.B)
+  connect('con1',host1.A,sw.A)
+  connect('con2',sw.B,host2.A)
+  connect('hostcon2',host2.B,term2.A)
+elif scenario == 3:
+  rtr=router('rtr')
+  connect('hostcon1',host1.B,traf.B)
+  connect('con1',host1.A,rtr.A)
+  connect('con2',rtr.B,host2.A)
+  connect('hostcon2',host2.B,term2.A)
+elif scenario == 4:
+  vsw=vswitch('vsw')
+  connect('hostcon1',host1.B,traf.B)
+  connect('con1',host1.A,vsw.A)
+  connect('con2',vsw.B,host2.A)
+  connect('hostcon2',host2.B,term2.A)
+elif scenario == 5:
+  sw1=vswitch('sw1',"","MPLS()")
+  sw2=vswitch('sw2',"MPLS()","")
+  connect('hostcon1',host1.B,traf.B)
+  connect('con3',host1.A,sw1.A)
+  connect('con3',sw1.B,sw2.A)
+  connect('con4',sw2.B,host2.A)
+  connect('hostcon2',host2.B,term2.A)
+elif scenario == 6:
+  sw1=vswitch('sw1',"","MPLS()")
+  sw2=vswitch('sw2',"MPLS()","")
+  link=datalink('link1',latency=5,trace=True)
+  connect('hostcon1',host1.B,traf.B)
+  connect('con3',host1.A,sw1.A)
+  connect('con3',sw1.B,link.A)
+  connect('con3',link.B,sw2.A)
+  connect('con4',sw2.B,host2.A)
+  connect('hostcon2',host2.B,term2.A)
 
 sched.process()
 

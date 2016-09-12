@@ -4,27 +4,8 @@ from queue import *
 from scapy.all import *
 from network import *
 
-class duplex2(duplex):
-   def __init__(self, *args, **kwargs):
-      super(duplex2, self).__init__(*args, **kwargs)
-      self.pcapw=PcapWriter(self.name+'.pcap')
 
-   def inspectA(self,stream,name):
-      frame=Ether(stream.decode("HEX"))
-      frame.time=float(self.nw())
-      self.pcapw.write(frame)
-      return stream
-
-   def inspectB(self,stream,name):
-      frame=Ether(stream.decode("HEX"))
-      frame.time=float(self.nw())
-      self.pcapw.write(frame)
-      return stream
-
-   def __del__(self):
-      print "Total packets : %s %d" % (self.name, self.pcount)
-
-class tcpgen(duplex2):
+class tcpgen(datalink):
    def __init__(self, *args, **kwargs):
       super(tcpgen, self).__init__(*args, **kwargs)
       self.listener = TCPListener(self.A.get,self.A.put,'1.1.1.1')
@@ -42,7 +23,7 @@ class tcpgen(duplex2):
       self.conn.close()
                
 
-class tcpterm(duplex2):
+class tcpterm(datalink):
    def __init__(self, *args, **kwargs):
       super(tcpterm, self).__init__(*args, **kwargs)
       self.listener = TCPListener(self.B.get,self.B.put,'2.2.2.2')
@@ -60,31 +41,47 @@ print conf.netcache.arp_cache
 
 sched=scheduler(tick=0.001,finish=10)
 
-# node1=duplex2('node1',ratelimit=1000,MaxSize=100)
-
 tcpxmit=tcpgen('tcpxmit',stop=3.0)
-
 tcprecv=tcpterm('tcprecv')
 
-#sw=eth_switch('sw')
-sw1=vswitch('sw1',"","MPLS()")
-sw2=vswitch('sw2',"MPLS()","")
-#sw3=vswitch('sw3',"MPLS()","")
+scenario=1
 
-link=transmission('link1',latency=5,trace=True)
+# duplex2('node1',ratelimit=1000,MaxSize=100)
 
-# traf=trafgen('traf',speed=1)
-# term2=terminal('term2')
-
-connect('con3',tcpxmit.B,sw1.A)
-connect('con3',sw1.B,sw2.A)
-connect('con4',sw2.B,tcprecv.A)
-
-# connect('con3',tcpxmit.B,sw1.A)
-# connect('con4',sw1.B,sw2.A)
-# connect('lcon1',sw2.B,link.A)
-# connect('lcon2',link.B,sw3.A)
-# connect('con6',tcprecv.A,sw2.B)
+if scenario == 0:
+  sw=duplex('node1')
+  connect('con1',tcpxmit.B,sw.A)
+  connect('con2',sw.B,tcprecv.A)
+elif scenario == 1:
+  link=datalink('link',latency=50,trace=True)
+  connect('con1',tcpxmit.B,link.A)
+  connect('con2',link.B,tcprecv.A)
+elif scenario == 2:
+  sw=eth_switch('sw')
+  connect('con1',tcpxmit.B,sw.A)
+  connect('con2',sw.B,tcprecv.A)
+elif scenario == 3:
+  rtr=router('rtr')
+  connect('con1',tcpxmit.B,rtr.A)
+  connect('con2',rtr.B,tcprecv.A)
+elif scenario == 4:
+  vsw=vswitch('vsw')
+  connect('con1',tcpxmit.B,vsw.A)
+  connect('con2',vsw.B,tcprecv.A)
+elif scenario == 5:
+  sw1=vswitch('sw1',"","MPLS()")
+  sw2=vswitch('sw2',"MPLS()","")
+  connect('con3',tcpxmit.B,sw1.A)
+  connect('con3',sw1.B,sw2.A)
+  connect('con4',sw2.B,tcprecv.A)
+elif scenario == 6:
+  sw1=vswitch('sw1',"","MPLS()")
+  sw2=vswitch('sw2',"MPLS()","")
+  link=datalink('link1',latency=5,trace=True)
+  connect('con3',tcpxmit.B,sw1.A)
+  connect('con3',sw1.B,link.A)
+  connect('con3',link.B,sw2.A)
+  connect('con4',sw2.B,tcprecv.A)
 
 sched.process()
 

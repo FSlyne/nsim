@@ -13,7 +13,7 @@ bind_layers(Ether, MPLS, type = 0x8847) # Marks MPLS
 bind_layers(MPLS, MPLS, bottom_of_label_stack = 0) # We're not at the bottom yet
 bind_layers(MPLS, IP)
 
-class transmission(duplex):
+class datalink(duplex):
    def __init__(self, *args, **kwargs):
       self.name=args[0]
       self.capacity = kwargs.get('capacity',0) # Mbps
@@ -27,7 +27,7 @@ class transmission(duplex):
       if self.capacity >0:
          kwargs['ratelimit'] = 1000000*self.capacity
       kwargs['ratio'] = 2 # 2 chars in queue eqiv. 1 byte of application data
-      super(transmission, self).__init__(*args, **kwargs)
+      super(datalink, self).__init__(*args, **kwargs)
 
    def inspectA(self,stream,name):
       if self.trace:
