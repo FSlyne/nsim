@@ -155,7 +155,6 @@ class connector(process):
          simtime=self.waitsectick()
          timlock,now=self.lock()
          root=self.name+':'+simtime+':'
-         self.writedb(root+'bps',self.getstats(self.name,'bits'))
          self.writedb(root+'qsize',self.qsize); self.qsize=0
          self.unlock(timlock)
 
@@ -172,22 +171,25 @@ class connector(process):
          self.unlock(timlock)
 #         print self.name,self.getsimtime(),bps,self.qsize
          if self.b.MaxSize > 0 and self.b.qsize() >= self.b.MaxSize: # Back Pressure
-            time.sleep(0.01)
+            self.waitfor(10) # msec
+#            time.sleep(0.01)
             print "Back Pressure", self.b.qsize(), self.b.MaxSize
             continue
          if self.ratelimit > 0 and self.getstats(self.name,'bits') > self.ratelimit: # Rate Limit
-            time.sleep(0.01)
+            self.waitfor(10)
+#            time.sleep(0.01)
             continue
 #         timlock,now=self.lock()
          item=self.a.get()
          item=self.inspect(item,self.name) # Careful about putting the inspect within the lock
 
          self.updatestats(self.name,len(item)*8/self.ratio,'bits') # 2 chars = 8 bits
+#         print item,self.ratio,len(item)*8/self.ratio
 
          if not self.b.put(item):
             self.updatestats(self.name,1,'pktdrp')
 
-         self.unlock(timlock)
+#         self.unlock(timlock)
 
 class xhub(object):
    def __init__(self,name,L):
@@ -255,9 +257,9 @@ class hub(object):
          t.put(item)
       
 class connect(object):
-   def __init__(self,name,X,Y,ratelimit=0):
-      connector(name+':connect1',X.outq,Y.inq,self.inspect,ratelimit=ratelimit)
-      connector(name+':connect2',Y.outq,X.inq,self.inspect,ratelimit=ratelimit)
+   def __init__(self,name,X,Y,ratelimit=0,ratio=1):
+      connector(name+':connect1',X.outq,Y.inq,self.inspect,ratelimit=ratelimit,ratio=1)
+      connector(name+':connect2',Y.outq,X.inq,self.inspect,ratelimit=ratelimit,ratio=1)
 
    def inspect(self,item,name):
        return item
@@ -326,6 +328,7 @@ class duplex(process):
       self.stop = stop
       self.ratelimit = ratelimit
       self.latency = latency
+      self.MaxSize = MaxSize
       if latency > 0:
          self.a = LatencyQueue(name=self.name+':a',MaxSize=MaxSize,ratio=ratio,latency=latency/2) # ratio of stored bytes to application bytes
          self.b = LatencyQueue(name=self.name+':b',MaxSize=MaxSize,ratio=ratio,latency=latency/2)
@@ -394,7 +397,7 @@ class trafgen(duplex):
       super(trafgen, self).__init__(*args, **kwargs)
 
       self.bpms = self.Mbps*1000
-      self.size = size = 500
+      self.size = size = 200
 
       process.__init__(self,0)
 
@@ -411,19 +414,24 @@ class trafgen(duplex):
      print "worker 1 starting"
      count=1
      self.payload=randPayload(self.size)
+     stime=0
      while True:
-       stime=self.waittick()
-       bits=0
        timlock,now=self.lock()
        while True:
-          load='%d:%s:%s'%(count,now,self.payload)
+          if self.MaxSize > 0 and self.A.qsize() >= self.MaxSize:
+              print "Traf Generator Congestion"
+              break
+          load='%d:%s:%s'%(count,stime,self.payload)
           loadbits=len(load)*8
-          if bits+loadbits <= self.bpms:
-             bits+=loadbits
+          currate=self.getstats('trafbits','bits')
+          if currate < self.Mbps*1000000:
+             self.updatestats('trafbits',loadbits,'bits')
              self.A.put(load); count+=1
           else:
+             self.updatestats('trafbits',0,'bits')
              break 
        self.unlock(timlock)
+       stime=self.wait100mstick()
 
    @threaded
    def worker2(self):

@@ -7,7 +7,7 @@ sched=scheduler(tick=0.001,finish=10)
 host1=host('host1',stack='udp')
 host2=host('host2',stack='udp')
 
-traf=trafgen('traf',ms1=1)
+traf=trafgen('traf1')
 term2=terminal('term2')
 
 scenario=1
@@ -21,10 +21,16 @@ if scenario == 0:
   connect('con2',sw.B,host2.A)
   connect('hostcon2',host2.B,term2.A)
 elif scenario == 1:
+  sw=datalink('node1',ratelimit=1000,MaxSize=1000)
+  connect('hostcon1',host1.B,traf.B)
+  connect('con1',host1.A,sw.A)
+  connect('con2',sw.B,host2.A)
+  connect('hostcon2',host2.B,term2.A)
+elif scenario == 1:
   link=datalink('link',latency=50,trace=True,debug=True,ber=-3)
   connect('hostcon1',host1.B,traf.B)
-  connect('con1',host1.A,link.A)
-  connect('con2',link.B,host2.A)
+  dataconnect('con1',host1.A,link.A)
+  dataconnect('con2',link.B,host2.A)
   connect('hostcon2',host2.B,term2.A)
 elif scenario == 2:
   sw=eth_switch('sw')

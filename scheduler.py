@@ -419,7 +419,9 @@ class process(object):
          bits+=int(b)    
        except:
          pass
-    self.r.set("statsps:"+units+"ps:"+elem,bits)
+    if len(l) > 0:
+       bits=bits*10/len(l) # scale up
+#    self.r.set("statsps:"+units+"ps:"+elem,bits)
     return bits
 
 

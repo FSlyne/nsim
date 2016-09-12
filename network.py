@@ -14,6 +14,11 @@ bind_layers(Ether, MPLS, type = 0x8847) # Marks MPLS
 bind_layers(MPLS, MPLS, bottom_of_label_stack = 0) # We're not at the bottom yet
 bind_layers(MPLS, IP)
 
+class dataconnect(connect):
+   def __init__(self, *args, **kwargs):
+      kwargs['ratio'] = 2 # 2 chars in queue eqiv. 1 byte of application data
+      super(dataconnect, self).__init__(*args, **kwargs)
+
 class datalink(duplex):
    def __init__(self, *args, **kwargs):
       self.name=args[0]
