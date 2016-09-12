@@ -339,6 +339,10 @@ class manip(object):
             self.swaptun(tagB)
          else:
             self.addtun(tagB)
-
+      else:
+         if tagA:
+            self.deltun()
+         else:
+            pass
 
 

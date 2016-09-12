@@ -401,7 +401,6 @@ class trafgen(duplex):
       if self.once > 0:
         self.worker3()
       elif self.ms1 > 0:
-        print self.ms1
         self.worker4()
       else:
         self.worker1()

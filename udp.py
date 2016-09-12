@@ -55,7 +55,7 @@ elif scenario == 5:
 elif scenario == 6:
   sw1=vswitch('sw1',"","MPLS()")
   sw2=vswitch('sw2',"MPLS()","")
-  link=datalink('link1',latency=5,trace=True)
+  link=datalink('link1',latency=100,trace=True)
   connect('hostcon1',host1.B,traf.B)
   connect('con3',host1.A,sw1.A)
   connect('con3',sw1.B,link.A)

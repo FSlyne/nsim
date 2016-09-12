@@ -44,7 +44,7 @@ sched=scheduler(tick=0.001,finish=10)
 tcpxmit=tcpgen('tcpxmit',stop=3.0)
 tcprecv=tcpterm('tcprecv')
 
-scenario=1
+scenario=6
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)
 
@@ -65,9 +65,11 @@ elif scenario == 3:
   connect('con1',tcpxmit.B,rtr.A)
   connect('con2',rtr.B,tcprecv.A)
 elif scenario == 4:
-  vsw=vswitch('vsw')
-  connect('con1',tcpxmit.B,vsw.A)
-  connect('con2',vsw.B,tcprecv.A)
+  sw1=vswitch('sw1',debug=True)
+  sw2=vswitch('sw2',debug=True)
+  connect('con3',tcpxmit.B,sw1.A)
+  connect('con3',sw1.B,sw2.A)
+  connect('con4',sw2.B,tcprecv.A)
 elif scenario == 5:
   sw1=vswitch('sw1',"","MPLS()")
   sw2=vswitch('sw2',"MPLS()","")
