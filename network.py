@@ -115,11 +115,13 @@ class router(object):
           return stream
          
 class vswitch(object):
-   def __init__(self,name,tagA="",tagB=""):
-      self.up=self.vswitch_up('up',tagA=tagA,tagB=tagB)
-      self.down=self.vswitch_down('down',tagA=tagA,tagB=tagB)
+   def __init__(self,name,tagA="",tagB="",debug=False):
+      self.up=self.vswitch_up('up',tagA=tagA,tagB=tagB,debug=debug)
+      self.down=self.vswitch_down('down',tagA=tagA,tagB=tagB,debug=debug)
       self.A=self.up.A
       self.B=self.down.B
+      self.debug=debug
+
 
       connect('cap',self.up.B,self.down.A)
 
@@ -137,10 +139,12 @@ class vswitch(object):
           stream1=stream.decode("HEX")
           stream1=Ether(stream1)
           p=manip(stream1)
-          # print "inspectA1a",name,p.struct,"\n"
+          if self.debug:
+            print "inspectA1a",name,p.struct,"\n"
           p.settun(self.tagA,self.tagB)
           p.build()
-          # print "inspectA1b",name,p.struct,"\n",p.line,"\n"
+          if self.debug:
+            print "inspectA1b",name,p.struct,"\n",p.line,"\n"
           stream=str(p.pkt).encode("HEX")
           return stream
 
@@ -148,10 +152,12 @@ class vswitch(object):
           stream1=stream.decode("HEX")
           stream1=Ether(stream1)
           p=manip(stream1)
-          # print "inspectB1a",name,p.struct,"\n"
+          if self.debug:
+            print "inspectB1a",name,p.struct,"\n"
           p.settun(self.tagB,self.tagA)
           p.build()
-          # print "inspectB1b",name,p.struct,"\n"
+          if self.debug:
+            print "inspectB1b",name,p.struct,"\n"
           stream=str(p.pkt).encode("HEX")
           return stream
 
@@ -169,10 +175,12 @@ class vswitch(object):
           stream1=stream.decode("HEX")
           stream1=Ether(stream1)
           p=manip(stream1)
-          # print "inspectA2a",name,p.struct,"\n"
+          if self.debug:
+            print "inspectA2a",name,p.struct,"\n"
           p.settun(self.tagB,self.tagA)
           p.build
-          # print "inspectA2b",name,p.struct,"\n"
+          if self.debug:
+            print "inspectA2b",name,p.struct,"\n"
           stream=str(p.pkt).encode("HEX")
           return stream
 
@@ -180,10 +188,12 @@ class vswitch(object):
           stream1=stream.decode("HEX")
           stream1=Ether(stream1)
           p=manip(stream1)
-          # print "inspectB2a",name,p.struct
+          if self.debug:
+             print "inspectB2a",name,p.struct
           p.settun(self.tagA,self.tagB)
           p.build
-          # print "inspectB2b",name,p.struct
+          if self.debug:
+            print "inspectB2b",name,p.struct
           stream=str(p.pkt).encode("HEX")
           return stream
 
@@ -215,7 +225,7 @@ class manip(object):
       self.pkt=pkt
       self.tunlist=['PPP','PPPoE','MPLS','Dot1Q','Ether']
       self.valid_protos=["Ether","IP","MPLS","Dot1Q","PPPoE""UDP","TCP"]
-      self.attributes=["src","dst","sport","dport"]
+      self.attributes=["src","dst","sport","dport","flags","window","seq","ack","dataofs","chksum"]
       self.align()
       
    def align(self):

@@ -161,7 +161,7 @@ class connector(process):
 
    @threaded
    def worker(self):
-      while self.isactive():
+      while self.isactive:
          timlock,now=self.lock()
 #         bps=self.getbps(self.name)
          try:
@@ -319,7 +319,7 @@ class stack(object):
 
 
 class duplex(process):
-   def __init__(self, name,ival=0.001,start=0,stop=0,ratelimit=0,MaxSize=0,ratio=1,latency=0):
+   def __init__(self, name,ival=0.001,start=0,stop=0,ratelimit=0,MaxSize=0,ratio=1,latency=0,debug=False):
       self.name = name
       self.ival = ival
       self.start = start
@@ -343,7 +343,7 @@ class duplex(process):
       self.A=self.interface(name+':A',self.a,self.c,self) # a,c
       self.B=self.interface(name+':B',self.d,self.b,self) # d,b
 
-      process.__init__(self,self.start)
+      process.__init__(self,self.start,debug=debug)
 
    def inspectA(self,item,name):
       return item
@@ -388,6 +388,9 @@ class trafgen(duplex):
       self.once=kwargs.get('once',0) # Mbps
       if 'once' in kwargs:
          del kwargs['once']
+      self.ms1=kwargs.get('ms1',0) # Mbps
+      if 'ms1' in kwargs:
+         del kwargs['ms1']
       super(trafgen, self).__init__(*args, **kwargs)
 
       self.bpms = self.Mbps*1000
@@ -397,12 +400,16 @@ class trafgen(duplex):
 
       if self.once > 0:
         self.worker3()
+      elif self.ms1 > 0:
+        print self.ms1
+        self.worker4()
       else:
         self.worker1()
       self.worker2()
 
    @threaded
    def worker1(self):
+     print "worker 1 starting"
      count=1
      self.payload=randPayload(self.size)
      while True:
@@ -421,6 +428,7 @@ class trafgen(duplex):
 
    @threaded
    def worker2(self):
+      print "worker 2 starting"
       while True:
          item=self.A.get()
          timlock,now=self.lock()
@@ -429,6 +437,7 @@ class trafgen(duplex):
          
    @threaded
    def worker3(self):
+     print "worker 3 starting"
      count=1
      self.payload=randPayload(self.size)
      stime=self.waittick()
@@ -437,6 +446,19 @@ class trafgen(duplex):
      load='%d:%s:%s'%(count,now,self.payload)
      self.A.put(load)
      self.unlock(timlock)
+     
+   @threaded
+   def worker4(self):
+     count=0
+     print "worker 4 starting"
+     payload="Message !!"
+     while True:
+       stime=self.waittick()
+       timlock,now=self.lock()
+       load='%d:%s:%s'%(count,now,payload)
+       self.A.put(load)
+       count+=1
+       self.unlock(timlock)
 
 class terminal(duplex):
    def __init__(self, *args, **kwargs):

@@ -66,18 +66,19 @@ tcpxmit=tcpgen('tcpxmit',stop=3.0)
 
 tcprecv=tcpterm('tcprecv')
 
-# sw=eth_switch('sw')
-sw1=vswitch('sw1',"","Dot1Q()")
-sw2=vswitch('sw2',"Dot1Q()","MPLS()")
-sw3=vswitch('sw3',"MPLS()","")
+#sw=eth_switch('sw')
+sw1=vswitch('sw1',"","MPLS()")
+sw2=vswitch('sw2',"MPLS()","")
+#sw3=vswitch('sw3',"MPLS()","")
 
-link=transmission('link1',latency=50,trace=True)
+link=transmission('link1',latency=5,trace=True)
 
-traf=trafgen('traf',speed=1)
-term2=terminal('term2')
+# traf=trafgen('traf',speed=1)
+# term2=terminal('term2')
 
-connect('con3',tcpxmit.B,link.A)
-connect('con4',link.B,tcprecv.A)
+connect('con3',tcpxmit.B,sw1.A)
+connect('con3',sw1.B,sw2.A)
+connect('con4',sw2.B,tcprecv.A)
 
 # connect('con3',tcpxmit.B,sw1.A)
 # connect('con4',sw1.B,sw2.A)

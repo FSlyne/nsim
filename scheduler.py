@@ -79,6 +79,7 @@ class scheduler(object):
          if self.wait > 0:
             time.sleep(self.wait)
       self.setinactive()
+      print "simtime",self.simtime,"finish",self.finish
 
    def process_waits(self):
       try:
@@ -186,7 +187,6 @@ class scheduler(object):
    @threaded
    def logreader(self):
       while True:
-      #   pass
          print self.r.blpop("Logger")[1]
 
 class process(object):
@@ -263,14 +263,12 @@ class process(object):
     self.r.zadd('ticks',str(key),str(0))
     result,score=self.r.blpop(key)
     self.release(key)
-#    timlock=self.lock()
     simtime=self.getsimtime()
     expect_tick = self.mytick+0.001
     act_tick=float(simtime)
-    if not isclose(act_tick, expect_tick):
-      self.alert.write("%0.3f %s Missed Clock tick: %0.3f\n" % (act_tick,self.name,expect_tick/1000))
+    if self.debug and not isclose(act_tick, expect_tick):
+      self.alert.write("%0.3f %s Missed Clock tick: %0.3f\n" % (act_tick,self.name,expect_tick))
     self.mytick =act_tick
-#    self.unlock(timlock)
     return simtime
 
   def waitsectick(self):
