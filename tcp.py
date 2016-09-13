@@ -15,9 +15,16 @@ class tcpgen(datalink):
 
    @threaded
    def worker1(self):
-      for i in range(1,5000):
-         stime=self.waittick()
-         self.conn.send("A"*250)
+      payload="A"*150
+      for count in range(1,5000):
+         now = stime=self.waittick()
+#         timlock,now=self.lock()
+         load='%d:%s:%s'%(count,now,payload)
+         loadbits=len(load)*8
+         self.updatestats('trafbits',loadbits,'bits')
+         r.hset("pkt:%07d"%count ,"sendtime",now)
+         self.conn.send(load)
+#         self.unlock(timlock)
       self.waitfor(9000)
       print "closing"
       self.conn.close()
@@ -34,8 +41,11 @@ class tcpterm(datalink):
    @threaded
    def worker(self):
       while True:
-         data=self.conn.recv(10000,timeout=1)
-         print len(data)
+         item=self.conn.recv(10000,timeout=1)
+         timlock,now=self.lock()
+         count,sendnow,payload=item.split(':')
+         r.hset("pkt:%07d"%int(count),"recvtime",now)
+         self.unlock(timlock)
       self.conn.close()
 
 print conf.netcache.arp_cache
@@ -45,7 +55,7 @@ sched=scheduler(tick=0.001,finish=10)
 tcpxmit=tcpgen('tcpxmit',stop=3.0)
 tcprecv=tcpterm('tcprecv')
 
-scenario=3
+scenario=1
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)
 
@@ -54,7 +64,7 @@ if scenario == 0:
   connect('con1',tcpxmit.B,sw.A)
   connect('con2',sw.B,tcprecv.A)
 elif scenario == 1:
-  link=datalink('link',latency=50,trace=True,ber=-4)
+  link=datalink('link',latency=20,ber=-3)
   connect('con1',tcpxmit.B,link.A)
   connect('con2',link.B,tcprecv.A)
 elif scenario == 2:

@@ -46,7 +46,7 @@ class LatencyQueue(process):
       lock,now=self.lock()
       ulimit=float(t)*1000+1
       for item,score in r.zrangebyscore(self.latencyqueue, 0 ,ulimit ,withscores=True):
-#        if self.name == 'link1:a' or self.name == 'link1:b' :
+#        if self.name == 'link:a' or self.name == 'link:b' :
 #           print "LQ:",self.name,ulimit,score,str(Ether(item.decode('HEX'))[UDP].payload).split(':')[1]
         if r.zrem(self.latencyqueue, item) == 1:
            self.size+=len(item)
@@ -421,11 +421,12 @@ class trafgen(duplex):
           if self.MaxSize > 0 and self.A.qsize() >= self.MaxSize:
               print "Traf Generator Congestion"
               break
-          load='%d:%s:%s'%(count,stime,self.payload)
+          load='%d:%s:%s'%(count,now,self.payload)
           loadbits=len(load)*8
           currate=self.getstats('trafbits','bits')
           if currate < self.Mbps*1000000:
              self.updatestats('trafbits',loadbits,'bits')
+             r.hset("pkt:%07d"%count ,"sendtime",now)
              self.A.put(load); count+=1
           else:
              self.updatestats('trafbits',0,'bits')
@@ -463,6 +464,9 @@ class trafgen(duplex):
        stime=self.waittick()
        timlock,now=self.lock()
        load='%d:%s:%s'%(count,now,payload)
+       loadbits=len(load)*8
+       self.updatestats('trafbits',loadbits,'bits')
+       r.hset("pkt:%07d"%count ,"sendtime",now)
        self.A.put(load)
        count+=1
        self.unlock(timlock)
@@ -479,6 +483,7 @@ class terminal(duplex):
          item=self.B.get()
          timlock,now=self.lock()
          count,sendnow,payload=item.split(':') 
+         r.hset("pkt:%07d"%int(count),"recvtime",now)
          item="Traffic Return: '%s:%s:%s'" % (str(count),str(sendnow),str(now))
          self.B.put(item)
          self.unlock(timlock)

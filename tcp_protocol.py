@@ -250,7 +250,8 @@ class TCPSocket(process):
 
         # Handle all the cases for self.state explicitly
         if self._has_load(packet):
-            self.recv_buffer += packet.load # Officially received ????
+#            self.recv_buffer += packet.load # Officially received ????
+            self.r.rpush("recvbuf:"+self.xid,packet.load)
             self.r.set("ack:"+self.xid+":"+"%010d"% packet.seq,len(packet.load))
 #               self._send_ack()
         elif "R" in recv_flags:
@@ -300,17 +301,10 @@ class TCPSocket(process):
 
 
     def recv(self, size, timeout=None):
-        start_time = time.time()
-        # Block until the connection is closed
-        while len(self.recv_buffer) < size:
-            self.waitfor(1)
-#            time.sleep(1)
-            if self.state in ["CLOSED", "LAST-ACK"]:
-                break
-            if timeout < (time.time() - start_time):
-                break
-        recv = self.recv_buffer[:size]
-        self.recv_buffer = self.recv_buffer[size:]
+        recv=''
+        if self.state in ["CLOSED", "LAST-ACK"]:
+           return recv 
+        recv = self.r.blpop("recvbuf:"+self.xid)[1]
         return recv
 
     @threaded
