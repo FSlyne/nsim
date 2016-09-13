@@ -35,6 +35,7 @@ class tcpterm(datalink):
    def worker(self):
       while True:
          data=self.conn.recv(10000,timeout=1)
+         print len(data)
       self.conn.close()
 
 print conf.netcache.arp_cache
@@ -44,7 +45,7 @@ sched=scheduler(tick=0.001,finish=10)
 tcpxmit=tcpgen('tcpxmit',stop=3.0)
 tcprecv=tcpterm('tcprecv')
 
-scenario=1
+scenario=3
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)
 
@@ -85,9 +86,9 @@ elif scenario == 6:
   connect('con3',link.B,sw2.A)
   connect('con4',sw2.B,tcprecv.A)
 elif scenario == 7:
-  sw1=vswitch('sw1',"","Dot1Q()")
-  sw2=vswitch('sw2',"Dot1Q()","MPLS()")
-  sw3=vswitch('sw3',"MPLS()","")
+  sw1=vswitch('sw1',"","Dot1Q(vlan=3)")
+  sw2=vswitch('sw2',"Dot1Q(vlan=3)","MPLS(label=101)")
+  sw3=vswitch('sw3',"MPLS(label=101)","")
   link1=datalink('link1',latency=10,trace=True)
   link2=datalink('link2',latency=50,trace=True)
   connect('con3',tcpxmit.B,sw1.A)

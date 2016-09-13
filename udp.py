@@ -20,14 +20,14 @@ if scenario == 0:
   connect('con1',host1.A,sw.A)
   connect('con2',sw.B,host2.A)
   connect('hostcon2',host2.B,term2.A)
-elif scenario == 1:
+elif scenario == 6:
   sw=datalink('node1',ratelimit=1000,MaxSize=1000)
   connect('hostcon1',host1.B,traf.B)
   connect('con1',host1.A,sw.A)
   connect('con2',sw.B,host2.A)
   connect('hostcon2',host2.B,term2.A)
 elif scenario == 1:
-  link=datalink('link',latency=50,trace=True,debug=True,ber=-3)
+  link=datalink('link',latency=50,trace=True,debug=True,ber=-9)
   connect('hostcon1',host1.B,traf.B)
   dataconnect('con1',host1.A,link.A)
   dataconnect('con2',link.B,host2.A)
