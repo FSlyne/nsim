@@ -25,12 +25,15 @@ class datalink(duplex):
       self.capacity = kwargs.get('capacity',0) # Mbps
       self.trace = kwargs.get('trace',False) # turn on/off pcap tracing
       self.ber = kwargs.get('ber',0) # 10^ber, ber negative
+      self.profile = kwargs.get('profile',False) # profile frames
       if 'capacity' in kwargs:
          del kwargs['capacity']
       if 'trace' in kwargs:
          del kwargs['trace']
       if 'ber' in kwargs:
          del kwargs['ber']
+      if 'profile' in kwargs:
+         del kwargs['profile']
       if self.trace:
          self.pcapw=PcapWriter(self.name+'.pcap')
       if self.capacity >0:
@@ -43,6 +46,8 @@ class datalink(duplex):
       timlock,now=self.lock()
       drop=False
       frame=Ether(stream.decode("HEX"))
+      if self.profile:
+         self.prof(frame)
       if not self.ber == 0:
          bits=len(frame)*8
          if packet_drop(bits,self.ber):
@@ -60,6 +65,8 @@ class datalink(duplex):
       timlock,now=self.lock()
       drop=False
       frame=Ether(stream.decode("HEX"))
+      if self.profile:
+         self.prof(frame)
       if not self.ber == 0:
          bits=len(frame)*8
          if packet_drop(bits,self.ber):
@@ -73,41 +80,86 @@ class datalink(duplex):
       self.unlock(timlock)
       return stream
 
+   def prof(self,frame):
+      counter = 0
+      while True:
+         layer=frame.getlayer(counter)
+         if (layer != None):
+            try:
+               v=int(self.r.hget("nodestat:%s" % self.name,layer.name))
+            except:
+               v=0
+            v+=len(layer)
+            self.r.hset("nodestat:%s"%self.name,layer.name,v)
+         else:
+            break
+         counter += 1
+
+
 
 class eth_switch(object):
-   def __init__(self,name):
-      self.up=self.eth_up('up')
-      self.down=self.eth_down('down')
+   def __init__(self,name,profile=False):
+      self.name=name
+      self.profile=profile
+      self.up=self.eth_up(name+':up',profile=profile)
+      self.down=self.eth_down(name+':down',profile=profile)
       self.A=self.up.A
       self.B=self.down.B
 
       connect('cap',self.up.B,self.down.A)
 
    class eth_up(duplex):
+       def __init__(self, *args, **kwargs):
+          self.profile = kwargs.get('profile',False) # profile frames
+          if 'profile' in kwargs:
+             del kwargs['profile']
+          super(eth_switch.eth_up, self).__init__(*args, **kwargs)
+
        def inspectA(self,stream,name):
+          if self.profile:
+             self.r.hincrby("nodestat:%s"%self.name,'eth_fwd',1)
           return stream
 
        def inspectB(self,stream,name):
           return stream
 
+
    class eth_down(duplex):
+       def __init__(self, *args, **kwargs):
+          self.profile = kwargs.get('profile',False) # profile frames
+          if 'profile' in kwargs:
+             del kwargs['profile']
+          super(eth_switch.eth_down, self).__init__(*args, **kwargs)
+
        def inspectA(self,stream,name):
+          if self.profile:
+             self.r.hincrby("nodestat:%s"%self.name,'eth_fwd',1)
           return stream
 
        def inspectB(self,stream,name):
           return stream
 
 class router(object):
-   def __init__(self,name):
-      self.up=self.route_up('up')
-      self.down=self.route_down('down')
+   def __init__(self,name,profile=False):
+      self.name=name
+      self.profile=profile
+      self.up=self.route_up(name+':up',profile=profile)
+      self.down=self.route_down(name+':down',profile=profile)
       self.A=self.up.A
       self.B=self.down.B
 
       connect('cap',self.up.B,self.down.A)
 
    class route_up(duplex):
+       def __init__(self, *args, **kwargs):
+          self.profile = kwargs.get('profile',False) # profile frames
+          if 'profile' in kwargs:
+             del kwargs['profile']
+          super(router.route_up, self).__init__(*args, **kwargs)
+
        def inspectA(self,stream,name):
+          if self.profile:
+             self.r.hincrby("nodestat:%s"%self.name,'ip_route',1)
           stream1=stream.decode("HEX")
           stream1=Ether(stream1)
           p=manip(stream1)
@@ -126,7 +178,15 @@ class router(object):
           return stream
 
    class route_down(duplex):
+       def __init__(self, *args, **kwargs):
+          self.profile = kwargs.get('profile',False) # profile frames
+          if 'profile' in kwargs:
+             del kwargs['profile']
+          super(router.route_down, self).__init__(*args, **kwargs)
+
        def inspectA(self,stream,name):
+          if self.profile:
+             self.r.hincrby("nodestat:%s"%self.name,'ip_route',1)
           stream1=stream.decode("HEX")
           stream1=Ether(stream1)
           p=manip(stream1)
@@ -145,9 +205,11 @@ class router(object):
           return stream
          
 class vswitch(object):
-   def __init__(self,name,tagA="",tagB="",debug=False):
-      self.up=self.vswitch_up('up',tagA=tagA,tagB=tagB,debug=debug)
-      self.down=self.vswitch_down('down',tagA=tagA,tagB=tagB,debug=debug)
+   def __init__(self,name,tagA="",tagB="",debug=False,profile=False):
+      self.name=name
+      self.profile=profile
+      self.up=self.vswitch_up(name+':up',tagA=tagA,tagB=tagB,debug=debug,profile=profile)
+      self.down=self.vswitch_down(name+':down',tagA=tagA,tagB=tagB,debug=debug,profile=profile)
       self.A=self.up.A
       self.B=self.down.B
       self.debug=debug
@@ -159,6 +221,9 @@ class vswitch(object):
        def __init__(self,*args, **kwargs):
           self.tagA = kwargs.get('tagA')
           self.tagB = kwargs.get('tagB')
+          self.profile = kwargs.get('profile',False) # profile frames
+          if 'profile' in kwargs:
+             del kwargs['profile']
           if 'tagA' in kwargs:
              del kwargs['tagA']
           if 'tagB' in kwargs:
@@ -168,7 +233,7 @@ class vswitch(object):
        def inspectA(self,stream,name):
           stream1=stream.decode("HEX")
           stream1=Ether(stream1)
-          p=manip(stream1)
+          p=manip(stream1,self.name)
           if self.debug:
             print "inspectA1a",name,p.struct,"\n"
           p.settun(self.tagA,self.tagB)
@@ -181,7 +246,7 @@ class vswitch(object):
        def inspectB(self,stream,name):
           stream1=stream.decode("HEX")
           stream1=Ether(stream1)
-          p=manip(stream1)
+          p=manip(stream1,self.name)
           if self.debug:
             print "inspectB1a",name,p.struct,"\n"
           p.settun(self.tagB,self.tagA)
@@ -195,6 +260,9 @@ class vswitch(object):
        def __init__(self,*args, **kwargs):
           self.tagA = kwargs.get('tagA')
           self.tagB = kwargs.get('tagB')
+          self.profile = kwargs.get('profile',False) # profile frames
+          if 'profile' in kwargs:
+             del kwargs['profile']
           if 'tagA' in kwargs:
              del kwargs['tagA']
           if 'tagB' in kwargs:
@@ -204,7 +272,7 @@ class vswitch(object):
        def inspectA(self,stream,name):
           stream1=stream.decode("HEX")
           stream1=Ether(stream1)
-          p=manip(stream1)
+          p=manip(stream1,self.name)
           if self.debug:
             print "inspectA2a",name,p.struct,"\n"
           p.settun(self.tagB,self.tagA)
@@ -217,7 +285,7 @@ class vswitch(object):
        def inspectB(self,stream,name):
           stream1=stream.decode("HEX")
           stream1=Ether(stream1)
-          p=manip(stream1)
+          p=manip(stream1,self.name)
           if self.debug:
              print "inspectB2a",name,p.struct
           p.settun(self.tagA,self.tagB)
@@ -254,8 +322,9 @@ class host(object):
           return stream
 
 class manip(object):
-   def __init__(self,pkt):
+   def __init__(self,pkt,name='null'):
       self.pkt=pkt
+      self.name=name
       self.tunlist=['PPP','PPPoE','MPLS','Dot1Q','Ether']
       self.valid_protos=["Ether","IP","MPLS","Dot1Q","PPPoE""UDP","TCP"]
       self.attributes=["src","dst","sport","dport","flags","window","seq","ack","dataofs","chksum"]
@@ -369,13 +438,17 @@ class manip(object):
    def settun(self, tagA, tagB):
       if tagB:
          if  tagA:
+            r.hincrby("nodestat:%s"%self.name,'label_swap',1)
             self.swaptun(tagB)
          else:
+            r.hincrby("nodestat:%s"%self.name,'label_push',1)
             self.addtun(tagB)
       else:
          if tagA:
+            r.hincrby("nodestat:%s"%self.name,'label_pop',1)
             self.deltun()
          else:
+            r.hincrby("nodestat:%s"%self.name,'label_null')
             pass
 
 

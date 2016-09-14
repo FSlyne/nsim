@@ -11,7 +11,7 @@ host2=host('host2',stack='udp')
 traf=trafgen('traf1')
 term2=terminal('term2')
 
-scenario=7
+scenario=4
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)
 
@@ -35,13 +35,13 @@ elif scenario == 2:
   dataconnect('con2',link.B,host2.A)
   connect('hostcon2',host2.B,term2.A)
 elif scenario == 3:
-  sw=eth_switch('sw')
+  sw=eth_switch('sw',profile=True)
   connect('hostcon1',host1.B,traf.B)
   connect('con1',host1.A,sw.A)
   connect('con2',sw.B,host2.A)
   connect('hostcon2',host2.B,term2.A)
 elif scenario == 4:
-  rtr=router('rtr')
+  rtr=router('rtr',profile=True)
   connect('hostcon1',host1.B,traf.B)
   connect('con1',host1.A,rtr.A)
   connect('con2',rtr.B,host2.A)
