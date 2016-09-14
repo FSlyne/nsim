@@ -79,7 +79,8 @@ class LatencyQueue(process):
 
   def qsize(self):
     # ratio is ratio of actual bytes to application bytes
-    return int(self.size/self.ratio)
+    return int(r.llen(self.queuename))/self.ratio
+#    return int(self.size/self.ratio)
 
   def empty(self):
     return self.qsize() == 0
@@ -115,11 +116,12 @@ class Queue():
        item = r.lpop(self.queuename)
     if item:
        item = item[1]
-    self.size=self.size=len(item)
+    self.size=self.size-len(item)
     return item
 
   def qsize(self):
     # ratio is ratio of actual bytes to application bytes
+    return int(r.llen(self.queuename))/self.ratio
     return int(self.size/self.ratio)
 
   def empty(self):
@@ -155,6 +157,7 @@ class connector(process):
          simtime=self.waitsectick()
          timlock,now=self.lock()
          root=self.name+':'+simtime+':'
+         self.writedb(self.name+':now:qsize',self.qsize)
          self.writedb(root+'qsize',self.qsize); self.qsize=0
          self.unlock(timlock)
 

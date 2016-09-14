@@ -7,7 +7,7 @@ port = '6379'
 r = redis.Redis(host=hostname,port=port )
 
 unit='qsize'
-unit='now:bps'
+unit='now:qsize'
 # con2:connect1:now:bps
 # unit='queue'
 
@@ -25,15 +25,13 @@ elist=[]
 elist=get_elements(unit)
 elist.sort()
 
-for e in elist:
-  v=r.get(e+":"+unit)
-  print e,v
 
-exit()
+#for e in elist:
+#  v=r.get(e+":"+unit)
+#  print e,v
 
 for e in elist:
-  print e
-  l=r.keys(pattern=e+':*:'+unit)
+  l=r.keys(pattern=e+':'+unit)
   for m in l:
      v=r.get(m)
      print m,v

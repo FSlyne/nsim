@@ -41,7 +41,7 @@ class scheduler(object):
       self.setactive()
       self.dbg=debug
       self.logreader()
-      self.calcstats()
+#      self.calcstats()
       self.plist=[] # functions to call back
 
    def setactive(self):

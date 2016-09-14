@@ -6,10 +6,10 @@ port = '6379'
 
 r = redis.Redis(host=hostname,port=port )
 
-#unit='qsize'
-#unit='now:bps'
+unit='qsize'
+unit='now:qsize'
 # con2:connect1:now:bps
-unit='queue'
+#unit='queue'
 
 def calcstats():
   l = r.keys(pattern='stats:*')
