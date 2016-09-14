@@ -296,14 +296,42 @@ class vswitch(object):
           return stream
 
 class host(object):
-   def __init__(self,name,stack='udp'):
-      self.up=self.eth_up('up')
+   def __init__(self,name,stack='udp',
+        msrc='00:00:00:00:00:11',
+        mdst='00:00:00:00:00:11',
+        isrc='1.1.1.1',
+        idst='2.2.2.2',
+        dport=2345):
+      sport=random.randint(1024,64000)
+      self.name=name
+      self.up=self.eth_up(name+':up',
+            msrc=msrc,mdst=mdst,isrc=isrc,
+            idst=idst,sport=sport,dport=dport)
       self.A=self.up.A
       self.B=self.up.B
-      self.sport=RandShort
-      self.dport=2345
 
    class eth_up(duplex):
+       def __init__(self, *args, **kwargs):
+          self.msrc = kwargs.get('msrc','00:00:00:00:00:11')
+          if 'msrc' in kwargs:
+             del kwargs['msrc']
+          self.mdst = kwargs.get('mdst','00:00:00:00:00:11')
+          if 'mdst' in kwargs:
+             del kwargs['mdst']
+          self.isrc = kwargs.get('isrc','1.1.1.1')
+          if 'isrc' in kwargs:
+             del kwargs['isrc']
+          self.idst = kwargs.get('idst','2.2.2.2')
+          if 'idst' in kwargs:
+             del kwargs['idst']
+          self.sport = kwargs.get('sport',8888)
+          if 'sport' in kwargs:
+             del kwargs['sport']
+          self.dport = kwargs.get('dport',2345)
+          if 'dport' in kwargs:
+             del kwargs['dport']
+          super(host.eth_up, self).__init__(*args, **kwargs)
+
        def inspectA(self,stream,name):
           eth=Ether(stream.decode("HEX"))
           try:
@@ -317,7 +345,7 @@ class host(object):
        def inspectB(self,payload,name):
 #          print "payload B:",payload
 #          stream=payload.decode("HEX")
-          frame=Ether(src='00:00:00:00:00:11',dst='00:00:00:00:00:22')/IP(src='1.1.1.1',dst='2.2.2.2')/UDP(sport=12123,dport=2345)/payload
+          frame=Ether(src=self.msrc,dst=self.mdst)/IP(src=self.isrc,dst=self.idst)/UDP(sport=self.sport,dport=self.dport)/payload
           stream=str(frame).encode("HEX")
           return stream
 
