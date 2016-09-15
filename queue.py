@@ -149,17 +149,17 @@ class connector(process):
       self.qsize=0
       process.__init__(self,0)
       self.worker()
-      self.statscollector()
-
-   @threaded
-   def statscollector(self):
-      while True:
-         simtime=self.waitsectick()
-         timlock,now=self.lock()
-         root=self.name+':'+simtime+':'
-         self.writedb(self.name+':now:qsize',self.qsize)
-         self.writedb(root+'qsize',self.qsize); self.qsize=0
-         self.unlock(timlock)
+#      self.statscollector()
+#
+#   @threaded
+#   def statscollector(self):
+#      while True:
+#         simtime=self.waitsectick()
+#         timlock,now=self.lock()
+#         root=self.name+':'+simtime+':'
+#         self.writedb(self.name+':now:qsize',self.qsize)
+#         self.writedb(root+'qsize',self.qsize); self.qsize=0
+#        self.unlock(timlock)
 
    @threaded
    def worker(self):
@@ -265,15 +265,15 @@ class hub(object):
       
 class connect(object):
    def __init__(self,name,X,Y,ratelimit=0,ratio=1):
-      connector(name+':connect1',X.outq,Y.inq,self.inspect,ratelimit=ratelimit,ratio=1)
-      connector(name+':connect2',Y.outq,X.inq,self.inspect,ratelimit=ratelimit,ratio=1)
+      connector(name+':nect1',X.outq,Y.inq,self.inspect,ratelimit=ratelimit,ratio=1)
+      connector(name+':nect2',Y.outq,X.inq,self.inspect,ratelimit=ratelimit,ratio=1)
 
    def inspect(self,item,name):
        return item
 
 class loopback(object):
    def __init__(self,name,X):
-      connector(name+':connect1',X.outq,X.inq,self.inspect)
+      connector(name+':loopback1',X.outq,X.inq,self.inspect)
 
    def inspect(self,item,name):
        return item
@@ -347,19 +347,34 @@ class duplex(process):
          self.c = Queue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio)
          self.d = Queue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio)
 
-      connector(name+':link1',self.a,self.b,self.inspectA,self.ratelimit,ratio=ratio) # a -> b, forward from interface A to interface B
-      connector(name+':link2',self.d,self.c,self.inspectB,self.ratelimit,ratio=ratio) # c -> d, reverse from interface B to interface A
+      connector(name+':dup1',self.a,self.b,self.inspectA,self.ratelimit,ratio=ratio) # a -> b, forward from interface A to interface B
+      connector(name+':dup2',self.d,self.c,self.inspectB,self.ratelimit,ratio=ratio) # c -> d, reverse from interface B to interface A
 
       self.A=self.interface(name+':A',self.a,self.c,self) # a,c
       self.B=self.interface(name+':B',self.d,self.b,self) # d,b
 
       process.__init__(self,self.start,debug=debug)
 
+      self.statscollector()
+
    def inspectA(self,item,name):
       return item
 
    def inspectB(self,item,name):
       return item
+
+
+   @threaded
+   def statscollector(self):
+      while True:
+         simtime=self.wait10mstick()
+         timlock,now=self.lock()
+         root=self.name+':'+simtime+':'
+         self.writedb(self.name+':now:Ainqsize',self.A.in_qsize())
+         self.writedb(self.name+':now:Aoutqsize',self.A.out_qsize())
+         self.writedb(self.name+':now:Binqsize',self.B.in_qsize())
+         self.writedb(self.name+':now:Boutqsize',self.B.out_qsize())
+         self.unlock(timlock)
 
    class interface:
       def __init__(self,name,inq,outq,outer):
@@ -387,8 +402,11 @@ class duplex(process):
          stream=self.get()
          return stream.decode("HEX")
 
-      def qsize(self):
+      def out_qsize(self):
          return self.outq.qsize()
+
+      def in_qsize(self):
+         return self.inq.qsize()
 
 class trafgen(duplex):
    def __init__(self, *args, **kwargs):

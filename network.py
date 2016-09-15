@@ -101,8 +101,8 @@ class eth_switch(object):
    def __init__(self,name,profile=False):
       self.name=name
       self.profile=profile
-      self.up=self.eth_up(name+':up',profile=profile)
-      self.down=self.eth_down(name+':down',profile=profile)
+      self.up=self.eth_up(name+'_Aside',profile=profile)
+      self.down=self.eth_down(name+'_Bside',profile=profile)
       self.A=self.up.A
       self.B=self.down.B
 
@@ -143,8 +143,8 @@ class router(object):
    def __init__(self,name,profile=False):
       self.name=name
       self.profile=profile
-      self.up=self.route_up(name+':up',profile=profile)
-      self.down=self.route_down(name+':down',profile=profile)
+      self.up=self.route_up(name+'_Aside',profile=profile)
+      self.down=self.route_down(name+'_Bside',profile=profile)
       self.A=self.up.A
       self.B=self.down.B
 
@@ -208,8 +208,8 @@ class vswitch(object):
    def __init__(self,name,tagA="",tagB="",debug=False,profile=False):
       self.name=name
       self.profile=profile
-      self.up=self.vswitch_up(name+':up',tagA=tagA,tagB=tagB,debug=debug,profile=profile)
-      self.down=self.vswitch_down(name+':down',tagA=tagA,tagB=tagB,debug=debug,profile=profile)
+      self.up=self.vswitch_up(name+'_Aside',tagA=tagA,tagB=tagB,debug=debug,profile=profile)
+      self.down=self.vswitch_down(name+'_Bside',tagA=tagA,tagB=tagB,debug=debug,profile=profile)
       self.A=self.up.A
       self.B=self.down.B
       self.debug=debug
@@ -305,7 +305,7 @@ class host(object):
         dport=2345):
       sport=random.randint(1024,64000)
       self.name=name
-      self.up=self.eth_up(name+':up',mdrop=mdrop,
+      self.up=self.eth_up(name,mdrop=mdrop,
             msrc=msrc,mdst=mdst,isrc=isrc,
             idst=idst,sport=sport,dport=dport)
       self.A=self.up.A

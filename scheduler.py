@@ -41,7 +41,8 @@ class scheduler(object):
       self.setactive()
       self.dbg=debug
       self.logreader()
-#      self.calcstats()
+      self.calcstats()
+      self.calcbitrate()
       self.plist=[] # functions to call back
 
    def setactive(self):
@@ -271,6 +272,31 @@ class scheduler(object):
             self.r.set(unit,tally)
          self.unlock(timlock)
       return
+
+   @threaded
+   def calcbitrate(self):
+      while True:
+         simtime=self.wait10mstick()
+         timlock,now=self.lock()
+         l = self.r.keys(pattern='stats:*')
+         m=[]
+         for e in l:
+            w=e.split(':')[:-1]
+            w=":".join(w)
+            m.append(w)
+         for e in m:
+            tally=0
+            pattern=e+":*"
+            l=self.r.keys(pattern)
+            l.sort()
+            f=l[-1:][0] #
+            b = int(self.r.get(f))*10 # 100th second * 10
+            f=e.split(':')
+            unit=f[0]+'ps:'+f[1]+'ps:'+":".join(f[2:])+':now'
+            self.r.set(unit,b)
+         self.unlock(timlock)
+      return
+
 
 
 class process(object):
