@@ -149,17 +149,6 @@ class connector(process):
       self.qsize=0
       process.__init__(self,0)
       self.worker()
-#      self.statscollector()
-#
-#   @threaded
-#   def statscollector(self):
-#      while True:
-#         simtime=self.waitsectick()
-#         timlock,now=self.lock()
-#         root=self.name+':'+simtime+':'
-#         self.writedb(self.name+':now:qsize',self.qsize)
-#         self.writedb(root+'qsize',self.qsize); self.qsize=0
-#        self.unlock(timlock)
 
    @threaded
    def worker(self):
@@ -174,14 +163,12 @@ class connector(process):
          self.unlock(timlock)
          if self.b.MaxSize > 0 and self.b.qsize() >= self.b.MaxSize: # Back Pressure
             self.waitfor(10) # msec
-#            time.sleep(0.01)
 #            print "Back Pressure", self.b.qsize(), self.b.MaxSize
             continue
 #         if self.ratelimit > 0:
 #            print self.getstats(self.name,'bits'), self.ratelimit
          if self.ratelimit > 0 and self.getstats(self.name,'bits') > self.ratelimit: # Rate Limit
             self.waitfor(10) # clock ticks
-#            time.sleep(0.01)
             continue
 #         timlock,now=self.lock()
          item=self.a.get()
