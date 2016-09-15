@@ -21,23 +21,20 @@ for e in l:
    except:
       sa=0.0
    try:
-      ra=float(r.hget(e,"sendtime"))
+      ra=float(r.hget(e,"recvtime"))
    except:
       ra=0.0
    scount+=1
-# except:
-#      continue
-#   if not ra:
-#      continue
+   if not ra:
+      continue
    rcount+=1
    delay+=ra-sa
-#   print ra-sa
    jitter=(sa-ra)-(sb-rb)
    jtotal+=jitter
-#    print e,sa,ra,sb,rb,sa-ra, sb-rb,jitter,ra-sa
+#   print e,sa,ra,sb,rb,sa-ra, sb-rb,jitter,ra-sa
    jcount+=1
 ploss=scount-rcount
 print "Send Count :%d, Receive Count :%d, Jitter Count:%d" % (scount, rcount, jcount)
-print "packet loss %d (%0.1f%%)" % (ploss,(ploss)/scount)
+print "packet loss %d (%0.3f %%)" % (ploss,ploss*100.0/scount)
 print "average jitter",jtotal/jcount
 print "average delay",delay/rcount

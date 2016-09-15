@@ -44,7 +44,7 @@ class LatencyQueue(process):
     while True:
       t=self.waittick()
       lock,now=self.lock()
-      ulimit=float(t)*1000+1
+      ulimit=float(t)*1000
       for item,score in r.zrangebyscore(self.latencyqueue, 0 ,ulimit ,withscores=True):
 #        if self.name == 'link:a' or self.name == 'link:b' :
 #           print "LQ:",self.name,ulimit,score,str(Ether(item.decode('HEX'))[UDP].payload).split(':')[1]
@@ -79,8 +79,8 @@ class LatencyQueue(process):
 
   def qsize(self):
     # ratio is ratio of actual bytes to application bytes
-    return int(r.llen(self.queuename))/self.ratio
-#    return int(self.size/self.ratio)
+#    return int(r.llen(self.queuename))/self.ratio
+    return int(self.size/self.ratio)
 
   def empty(self):
     return self.qsize() == 0
@@ -122,7 +122,7 @@ class Queue():
   def qsize(self):
     # ratio is ratio of actual bytes to application bytes
     return int(r.llen(self.queuename))/self.ratio
-    return int(self.size/self.ratio)
+#    return int(self.size/self.ratio)
 
   def empty(self):
     return self.qsize() == 0
@@ -172,14 +172,15 @@ class connector(process):
             self.qsize=self.a.qsize()
          self.updatestats(self.name,0,'bits')
          self.unlock(timlock)
-#         print self.name,self.getsimtime(),bps,self.qsize
          if self.b.MaxSize > 0 and self.b.qsize() >= self.b.MaxSize: # Back Pressure
             self.waitfor(10) # msec
 #            time.sleep(0.01)
-            print "Back Pressure", self.b.qsize(), self.b.MaxSize
+#            print "Back Pressure", self.b.qsize(), self.b.MaxSize
             continue
+#         if self.ratelimit > 0:
+#            print self.getstats(self.name,'bits'), self.ratelimit
          if self.ratelimit > 0 and self.getstats(self.name,'bits') > self.ratelimit: # Rate Limit
-            self.waitfor(10)
+            self.waitfor(10) # clock ticks
 #            time.sleep(0.01)
             continue
 #         timlock,now=self.lock()
