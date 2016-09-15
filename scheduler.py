@@ -61,7 +61,7 @@ class scheduler(object):
        return False
 
    def signal(self,key):
-      ret=self.r.lpush(key,'release')
+      ret=self.r.lpush(key,self.simtime)
 
    def debug(self,line):
       if self.dbg:
@@ -203,7 +203,7 @@ class scheduler(object):
      self.r.zadd('ticks',str(key),str(0))
      result,score=self.r.blpop(key)
      self.release(key)
-     simtime=self.simtime()
+     simtime=self.simtime
      return simtime
 
    def waitsectick(self):
@@ -281,13 +281,16 @@ class process(object):
     self.r = globalr
     self.now=now
     self.mytick=0
+    self.simtime=0
     self.begin()
     self.debug=debug
     self.alert=open("alert.log","a+")
+    self.proctime=0
+    self.ticktock()
 
   @threaded
   def begin(self):
-    result,score=self.waituntil(self.now)
+    stime=self.waituntil(self.now)
 
   def isactive(self):
     try:
@@ -308,7 +311,7 @@ class process(object):
   def nw(self):
 #    return self.now
 #    return "xyz"
-    return self.r.get('simtime')
+    return self.simtime
 
   def gettoken(self):
     key=self.randtoken()
@@ -320,73 +323,95 @@ class process(object):
   def release(self,key):
     self.r.delete(key)
 
+  @threaded
+  def ticktock(self):
+    while True:
+      self.simtime=self.waittick()
+
+# wait until 0.001 seconds
   def waiton(self,key,n):
     self.r.zadd('schedule',str(key),str(n))
     result,score=self.r.blpop(key)
-    self.now=n
+#    self.now=n
     self.release(key)
-    return result,score
-
+    return str(float(score))
+  
+# wait until 0.001 seconds
   def waituntil(self,n):
     mylock=self.gettoken()
-    result,score=self.waiton(mylock,n)
-    return result,score
+    stime=self.waiton(mylock,n)
+    return stime
 
   def waitfor2(self,n):
-    result,score=self.waituntil(self.now+n)
-    return result,score
+    stime=self.waituntil(self.now+n)
+    return stime
 
+  # wait n ticks
   def waitfor(self,n):
     if n <= 0:
-       return
+       return self.simtime
     for i in range(0,n):
-       self.waittick()
+       stime = self.waittick()
+    return stime
 
   def waittick(self):
-    key=self.gettoken()
-    self.r.zadd('ticks',str(key),str(0))
-    result,score=self.r.blpop(key)
-    self.release(key)
-    simtime=self.getsimtime()
-    expect_tick = self.mytick+0.001
-    act_tick=float(simtime)
-    if self.debug and not isclose(act_tick, expect_tick):
-      self.alert.write("%0.3f %s Missed Clock tick: %0.3f\n" % (act_tick,self.name,expect_tick))
-    self.mytick =act_tick
-    return simtime
+     s=float(self.simtime); p=float(self.proctime)
+     if s >= p+0.001:
+         self.proctime=self.simtime
+         if self.debug:
+            self.alert.write("%0.3f %s Missed Clock tick: %0.3f\n" % (s,self.name,p))
+         return self.simtime
+     key=self.gettoken()
+     self.r.zadd('ticks',str(key),str(0))
+     result,score=self.r.blpop(key)
+     self.proctime=str(float(score))
+     self.release(key)
+# ?? self.simtime = self.proctime
+     return self.proctime
+
+#    key=self.gettoken()
+#    self.r.zadd('ticks',str(key),str(0))
+#    result,score=self.r.blpop(key)
+#    simtime=str(float(score))
+#    self.release(key)
+#    expect_tick = float(self.simtime)+0.001
+#    act_tick=score
+#    if self.debug and not isclose(act_tick, expect_tick):
+#      self.alert.write("%0.3f %s Missed Clock tick: %0.3f\n" % (act_tick,self.name,expect_tick))
+#    return simtime
 
   def waitsectick(self):
     key=self.gettoken()
     self.r.zadd('secticks',str(key),str(0))
     result,score=self.r.blpop(key)
     self.release(key)
-    return str(int(float(self.getsimtime())))
+    return str(int(float(self.simtime)))
 
   def wait10mstick(self):
     key=self.gettoken()
     self.r.zadd('10msticks',str(key),str(0))
     result,score=self.r.blpop(key)
     self.release(key)
-    return str(int(float(self.getsimtime())))
+    return str(int(float(self.simtime)))
 
   def wait100mstick(self):
     key=self.gettoken()
     self.r.zadd('100msticks',str(key),str(0))
     result,score=self.r.blpop(key)
     self.release(key)
-    return str(int(float(self.getsimtime())))
+    return str(int(float(self.simtime)))
 
   def lock(self):
     timlock=self.gettoken()
     self.r.sadd('timlock',str(timlock))
-    now=self.getsimtime()
-    return timlock,now
+    return timlock,self.simtime
 
   def unlock(self,timlock):
     try:
        self.r.srem('timlock',str(timlock))
     except:
        pass
+    return self.simtime
 
   def writedb(self,attr,value):
     self.r.set(attr,str(value))

@@ -297,6 +297,7 @@ class vswitch(object):
 
 class host(object):
    def __init__(self,name,stack='udp',
+        mdrop='',
         msrc='00:00:00:00:00:11',
         mdst='00:00:00:00:00:11',
         isrc='1.1.1.1',
@@ -304,7 +305,7 @@ class host(object):
         dport=2345):
       sport=random.randint(1024,64000)
       self.name=name
-      self.up=self.eth_up(name+':up',
+      self.up=self.eth_up(name+':up',mdrop=mdrop,
             msrc=msrc,mdst=mdst,isrc=isrc,
             idst=idst,sport=sport,dport=dport)
       self.A=self.up.A
@@ -312,6 +313,9 @@ class host(object):
 
    class eth_up(duplex):
        def __init__(self, *args, **kwargs):
+          self.mdrop = kwargs.get('mdrop','')
+          if 'mdrop' in kwargs:
+             del kwargs['mdrop']
           self.msrc = kwargs.get('msrc','00:00:00:00:00:11')
           if 'msrc' in kwargs:
              del kwargs['msrc']
@@ -334,6 +338,9 @@ class host(object):
 
        def inspectA(self,stream,name):
           eth=Ether(stream.decode("HEX"))
+          if self.mdrop:
+             if eth.dst == self.mdrop:
+                return ''
           try:
             ip=eth[IP]
             udp=ip[UDP]
@@ -354,8 +361,8 @@ class manip(object):
       self.pkt=pkt
       self.name=name
       self.tunlist=['PPP','PPPoE','MPLS','Dot1Q','Ether']
-      self.valid_protos=["Ether","IP","MPLS","Dot1Q","PPPoE""UDP","TCP"]
-      self.attributes=["src","dst","sport","dport","flags","window","seq","ack","dataofs","chksum"]
+      self.valid_protos=["Ether","IP","MPLS","Dot1Q","PPPoE","UDP","TCP"]
+      self.attributes=["src","dst","sport","dport","flags","window","seq","ack","dataofs"]
       self.align()
       
    def align(self):
@@ -419,7 +426,11 @@ class manip(object):
       
    def clean(self):
       for i,n in enumerate(self.struct):
-         proto,field=n.replace("(","|").replace(")","|").split("|")[0:2]
+         try:
+            proto,field=n.replace("(","|").replace(")","|").split("|")[0:2]
+         except:
+            print i,n
+            proto,field="",""
          if proto in self.valid_protos:
             p=[]
             for l in field.split(","):

@@ -1,6 +1,6 @@
 from queue import *
 
-scenario =0
+scenario =2
 
 
 sched=scheduler(tick=0.001,finish=10)

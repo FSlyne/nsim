@@ -185,6 +185,9 @@ class connector(process):
 #         timlock,now=self.lock()
          item=self.a.get()
          item=self.inspect(item,self.name) # Careful about putting the inspect within the lock
+         if len(item) == 0:
+            # This is to catch Dropped packets from host
+            continue
 
          self.updatestats(self.name,len(item)*8/self.ratio,'bits') # 2 chars = 8 bits
 #         print item,self.ratio,len(item)*8/self.ratio
@@ -491,3 +494,37 @@ class terminal(duplex):
          self.B.put(item)
          self.unlock(timlock)
 
+class flowgen(duplex):
+   def __init__(self, *args, **kwargs):
+      flowcount=kwargs.get('flowcount',1) 
+      stop=kwargs.get('stop',0)
+      start=kwargs.get('start',0)
+      ival=kwargs.get('ival',0.001)
+      if 'flowcount' in kwargs:
+         del kwargs['flowcount']
+      super(flowgen, self).__init__(*args, **kwargs)
+
+      if stop == 0:
+         return
+
+      process.__init__(self,0)
+
+      for i in range(0,flowcount):
+         self.worker(start+ival*i,stop)
+
+   @threaded
+   def worker(self,start,stop):
+     stime=self.waituntil(start)
+     count=0
+     print "flow starting !!!",stime
+     payload="Message !!"
+     while True:
+       stime=self.waittick()
+       timlock,now=self.lock()
+       load='%d:%s:%s'%(count,now,payload)
+       self.A.put(load)
+       count+=1
+       self.unlock(timlock)
+       if float(stime) > float(stop):
+          print "flow stopping !!!",stime,stop
+          break
