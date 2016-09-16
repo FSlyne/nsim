@@ -1,3 +1,4 @@
+import Queue
 import threading
 import time
 import random
@@ -13,9 +14,78 @@ debug=True
 hostname = '127.0.0.1'
 port = '6379'
 
-r = redis.Redis(
-    host=hostname,
-    port=port )
+#r = redis.Redis(
+#    host=hostname,
+#    port=port )
+
+# https://fauie.com/2013/05/10/redis-py-connection-pool-with-unix-sockets/
+r=redis.Redis(unix_socket_path='/var/run/redis/redis.sock')
+
+class AgedQueue(process):
+  import string
+  import random
+  def __init__(self,name='queue',ival=0.001,MaxSize=0,ratio=1,latency=0):
+    self.size=0
+    self.ival=ival
+    self.MaxSize = MaxSize
+    self.name=name
+    self.ratio = ratio
+    self.xid=self.randtoken()
+    self.queuename="queue:"+self.xid+":("+self.name+")"
+    self.aqueuename="aqueue:"+self.xid+":("+self.name+")"
+    self.garbage=Queue()
+    self.counter=1
+    self.cleanup()
+   
+    process.__init__(self,0)
+
+  def randtoken(self,size=10, chars=string.ascii_uppercase + string.digits):
+    return ''.join(self.random.choice(chars) for _ in range(size))
+
+  @threaded
+  def cleanup(self):
+    while True:
+      key=self.garbage.get()
+      r.delete(key)
+
+  def get(self):
+    while True:
+      e=r.blpop(self.aqueuename)
+      lock,now=self.lock()
+      e=e[1]
+      key=self.queuename+":"+e
+      w=float(e)
+      ulimit=float(self.getsimtime())*1000
+      self.unlock(lock)
+      if ulimit - w > 10:
+         print "Dropping Packet", ulimit,w,ulimit-w
+         self.garbage.put(key)
+      else:
+         item=r.get(key)
+         self.garbage.put(key)
+         break
+    return item
+      
+  def put(self,item):
+    if self.MaxSize > 0:
+       if self.qsize() > self.MaxSize:
+          return False
+    futuretime=float(self.getsimtime())
+    timestamp="%0.4f%06d" % (futuretime,self.counter); self.counter+=1
+    timestamp=float(timestamp)*1000 # e.g. 226.0000171
+#    if self.name == 'node1:a':
+#       print "++++++","qqq:"+self.xid+":"+str(timestamp),item
+    r.set(self.queuename+":"+str(timestamp),item)
+    r.rpush(self.aqueuename,str(timestamp))
+    return True
+
+  def qsize(self):
+    # ratio is ratio of actual bytes to application bytes
+#    return int(r.llen(self.queuename))/self.ratio
+    return int(self.size/self.ratio)
+
+  def empty(self):
+    return self.qsize() == 0
 
 class LatencyQueue(process):
   import string
@@ -27,11 +97,13 @@ class LatencyQueue(process):
     self.MaxSize = MaxSize
     self.name=name
     self.ratio = ratio
-    self.queuename="queue:"+self.randtoken()+":("+self.name+")"
-    self.latencyqueue="latqueue:"+self.randtoken()+":("+self.name+")"
+    self.xid=self.randtoken()
+    self.queuename="queue:"+self.xid+":("+self.name+")"
+    self.latencyqueue="latqueue:"+self.xid+":("+self.name+")"
 #    self.r=redis.Redis(host=hostname,port=port )
     self.counter=1
 #    self.lat_manager()
+    self.garbage=Queue()
     process.__init__(self,0)
     if latency>0:
        self.lat_manager()
@@ -39,16 +111,26 @@ class LatencyQueue(process):
   def randtoken(self,size=10, chars=string.ascii_uppercase + string.digits):
     return ''.join(self.random.choice(chars) for _ in range(size))
 
+
+  @threaded
+  def cleanup(self):
+    while True:
+      key=self.garbage.get()
+      r.delete(key)
+
+
   @threaded
   def lat_manager(self):
     while True:
       t=self.waittick()
       lock,now=self.lock()
       ulimit=float(t)*1000
-      for item,score in r.zrangebyscore(self.latencyqueue, 0 ,ulimit ,withscores=True):
+      for key,score in r.zrangebyscore(self.latencyqueue, 0 ,ulimit ,withscores=True):
 #        if self.name == 'link:a' or self.name == 'link:b' :
 #           print "LQ:",self.name,ulimit,score,str(Ether(item.decode('HEX'))[UDP].payload).split(':')[1]
-        if r.zrem(self.latencyqueue, item) == 1:
+        if r.zrem(self.latencyqueue, key) == 1:
+           item=r.get(key)
+           self.garbage.put(key)
            self.size+=len(item)
            r.rpush(self.queuename, item)
       self.unlock(lock)
@@ -60,8 +142,10 @@ class LatencyQueue(process):
     if self.latency > 0:
        futuretime=(float(self.getsimtime())*1000+self.latency)/1000
        timestamp="%0.4f%06d" % (futuretime,self.counter); self.counter+=1
-       timestamp=float(timestamp)*1000
-       r.zadd(self.latencyqueue,item,timestamp)
+       timestamp=float(timestamp)*1000 # e.g. 226.0000171
+       key="xyz:"+self.xid+":"+str(timestamp)
+       r.set(key,item)
+       r.zadd(self.latencyqueue,key,timestamp)
     else:
        self.size+=len(item)
        r.rpush(self.queuename, item)
@@ -329,10 +413,10 @@ class duplex(process):
          self.c = LatencyQueue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio,latency=latency/2)
          self.d = LatencyQueue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio,latency=latency/2)
       else:
-         self.a = Queue(name=self.name+':a',MaxSize=MaxSize,ratio=ratio) # ratio of stored bytes to application bytes
-         self.b = Queue(name=self.name+':b',MaxSize=MaxSize,ratio=ratio)
-         self.c = Queue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio)
-         self.d = Queue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio)
+         self.a = AgedQueue(name=self.name+':a',MaxSize=MaxSize,ratio=ratio) # ratio of stored bytes to application bytes
+         self.b = AgedQueue(name=self.name+':b',MaxSize=MaxSize,ratio=ratio)
+         self.c = AgedQueue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio)
+         self.d = AgedQueue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio)
 
       connector(name+':dup1',self.a,self.b,self.inspectA,self.ratelimit,ratio=ratio) # a -> b, forward from interface A to interface B
       connector(name+':dup2',self.d,self.c,self.inspectB,self.ratelimit,ratio=ratio) # c -> d, reverse from interface B to interface A

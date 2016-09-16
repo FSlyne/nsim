@@ -14,8 +14,10 @@ def threaded(fn):
 hostname = '127.0.0.1'
 port = '6379'
 
-pool = redis.ConnectionPool(host='localhost', port=6379, db=0)
-globalr = redis.Redis(connection_pool=pool )
+# pool = redis.ConnectionPool(host='localhost', port=6379, db=0)
+#pool = redis.ConnectionPool(unix_socket_path='/var/run/redis/redis.sock')
+#globalr = redis.Redis(connection_pool=pool )
+globalr=redis.Redis(unix_socket_path='/var/run/redis/redis.sock')
 
 #r = redis.Redis(
 #    host=hostname,
@@ -344,7 +346,8 @@ class process(object):
     return(key)
 
   def getsimtime(self):
-    return self.r.get("simtime")
+    return self.simtime
+#    return self.r.get("simtime")
 
   def release(self,key):
     self.r.delete(key)

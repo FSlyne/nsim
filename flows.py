@@ -14,7 +14,7 @@ flowgen=flowgen('flowgen',start=0.002,stop=2.5,ival=0.300,flowcount=5)
 
 scenario=3
 
-sw=datalink('node1',capacity=1,MaxSize=10000,latency=40)
+sw=datalink('node1',capacity=1,MaxSize=10000)
 # sw=datalink('node1',latency=40)
 connect('hostcon1',host1.B,traf.B)
 connect('con1',host1.A,sw.A)

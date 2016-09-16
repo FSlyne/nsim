@@ -6,11 +6,11 @@ sched=scheduler(tick=0.001,finish=10)
 host1=host('host1',stack='udp')
 host2=host('host2',stack='udp')
 
-#traf=trafgen('traf1',ms1=1)
-traf=trafgen('traf1')
+traf=trafgen('traf1',ms1=1)
+# traf=trafgen('traf1')
 term2=terminal('term2')
 
-scenario=3
+scenario=8
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)
 
