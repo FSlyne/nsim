@@ -190,8 +190,7 @@ class TCPSocket(process):
                      seq=int(seq),
                      ack=self.last_ack_sent,
                      flags=flags,
-                     window=rewin,
-                     options=[('WScale', shft)])
+                     window=self.window)
         # Add the IP header
         full_packet = Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')/self.ip_header / packet / payload
         self.listener.send(full_packet)
@@ -207,8 +206,7 @@ class TCPSocket(process):
                      seq=self.seq,
                      ack=self.last_ack_sent,
                      flags=flags,
-                     window=rewin,
-                     options=[('WScale', shft)])
+                     window=self.window)
         full_packet = Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')/self.ip_header / packet
         # Add the payload
         if load:
@@ -279,7 +277,8 @@ class TCPSocket(process):
 
         self.last_ack_sent = max(self.next_seq(packet), self.last_ack_sent)
         self.last_ack_recv = packet.ack
-        self.cwnd = self.descale(packet.window,self.find_tcp_option('WScale',0,packet[TCP].options))
+#        self.cwnd = self.descale(packet.window,self.find_tcp_option('WScale',0,packet[TCP].options))
+        self.cwnd = packet.window
 
         recv_flags = packet.sprintf("%TCP.flags%")
 
@@ -354,14 +353,9 @@ class TCPSocket(process):
         x=[]; y=[]
         l = self.r.keys(pattern="ack:"+self.xid+":*")
         l.sort()
-        print l
         for e in l:
-           try:
-              seq=int(e.split(':')[-1:][0].lstrip("0"))
-              val=int(self.r.get("ack:"+self.xid+":"+"%010d" % seq))
-           except:
-              print e
-              print "Seq Error",seq
+           seq=int(e.split(':')[-1:][0].lstrip("0"))
+           val=int(self.r.get("ack:"+self.xid+":"+"%010d" % seq))
            x.append(seq); y.append(seq+val)
         if x:
 #           print "*:",x,"+:",y

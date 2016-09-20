@@ -23,7 +23,6 @@ class tcpgen(datalink):
          loadbits=len(load)*8
          self.updatestats('trafbits',loadbits,'bits')
          r.hset("pkt:%07d"%count ,"sendtime",now)
-         print "sending load",load
          self.conn.send(load)
 #         self.unlock(timlock)
       self.waitfor(1000)
