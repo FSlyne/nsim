@@ -37,26 +37,17 @@ class TCPSocket(process):
         self.name="TCPsocket"
         process.__init__(self,0)
         self.actual_ack = 0
-        # self.r = redis.Redis(host=host,port=port )
-        self.r =redis.Redis(unix_socket_path='/var/run/redis/redis.sock')
+        self.r = redis.Redis(host=host,port=port )
         self.xid = self.randtoken()
         self.last_ack_recv = 0
         self.bulksend()
         self.statscollector()
-        self.garbage=Queue()
         self.ackmgr()
-        self.cleanup()
 
         self.retranQ = retransmission(callback=self.sendseq, xid=self.xid,congmgr=self.congestion_mgr)
 
     def randtoken(self,size=6, chars=string.ascii_uppercase + string.digits):
       return ''.join(self.random.choice(chars) for _ in range(size))
-
-    @threaded
-    def cleanup(self):
-       while True:
-          key=self.garbage.get()
-          r.delete(key)
 
     @threaded
     def statscollector(self):
@@ -350,9 +341,7 @@ class TCPSocket(process):
                  seq=int(e.split(':')[-1:][0].lstrip("0"))
                  if seq <= end:
 #                    print "deleting:", "ack:"+self.xid+":"+"%010d" % seq
-                    key="ack:"+self.xid+":"+"%010d" % seq
-                    self.garbage.put(key)
-#                    self.r.delete(key)
+                    self.r.delete("ack:"+self.xid+":"+"%010d" % seq)
         self.unlock(lock)
         self.waitfor(5)
 
@@ -363,60 +352,46 @@ class retransmission(process):
        self.queue = queue
        self.queue2 = queue+"2"
        self.rto = rto
-       self.gap = rto*0.1
+       self.gap = rto*0.9
        self.callback=callback
        self.congmgr=congmgr
        self.name='tcpretransmission'
-       self.garbage=Queue()
        process.__init__(self,0)
        self.routine()
        self.routine2()
-       self.cleanup()
-
-    @threaded
-    def cleanup(self):
-       while True:
-          key=self.garbage.get()
-          r.delete(key)
 
     @threaded
     def routine(self):
        while True:
           for seq,tick in self.r.zrangebyscore(self.queue, 0 ,str(float(self.getsimtime())+self.gap),withscores=True):
              self.congmgr(0) # signal a timeout
-             print "timeout - 1",seq,tick,self.getsimtime()
              self.callback(seq)
              self.remove(seq)
              self.add2(seq)
           else:
-             self.waitfor(1)
+             self.waitfor(5)
 
     @threaded
     def routine2(self):
        while True:
           for seq,tick in self.r.zrangebyscore(self.queue2, 0 ,str(float(self.getsimtime())+self.gap),withscores=True):
              self.congmgr(0) # signal a timeout
-             print "timeout - 2"
              self.callback(seq)
              self.remove2(seq)
 #             self.add(seq)
           else:
-             self.waitfor(1)
+             self.waitfor(5)
 
     def remove(self,seq):
-       key="seq:"+self.xid+":"+str(seq)
        try:
-         size=int(len(self.r.get(key)))
-         self.garbage.put(key)
+         size=int(len(self.r.get("seq:"+self.xid+":"+str(seq))))
        except:
          size=0
        return self.r.zrem(self.queue, str(seq)),size
 
     def remove2(self,seq):
-       "seq:"+self.xid+":"+str(seq)
        try:
-         size=int(len(self.r.get(key)))
-         self.garbage.put(key)
+         size=int(len(self.r.get("seq:"+self.xid+":"+str(seq))))
        except:
          size=0
        return self.r.zrem(self.queue2, str(seq)),size
@@ -431,7 +406,6 @@ class retransmission(process):
 
 
     def cleardown(self,threshseq):
-       print "received threshseq ",threshseq,self.getsimtime()
        tally=0
        for seq,tick in self.r.zrangebyscore(self.queue, 0 ,str(100000),withscores=True):
          if int(seq) <= int(threshseq):
@@ -439,7 +413,7 @@ class retransmission(process):
             tally+=size
        for seq,tick in self.r.zrangebyscore(self.queue2, 0 ,str(100000),withscores=True):
          if int(seq) <= int(threshseq):
-            status,size =self.remove2(seq)
+            status,size =self.remove(seq)
             tally+=size
        return tally
 
@@ -447,7 +421,7 @@ class retransmission(process):
        for seq,tick in self.r.zrangebyscore(self.queue, 0 ,str(1000000000),withscores=True):
            self.remove(seq)
        for seq,tick in self.r.zrangebyscore(self.queue2, 0 ,str(1000000000),withscores=True):
-           self.remove2(seq)
+           self.remove(seq)
 
 
 

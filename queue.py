@@ -24,12 +24,14 @@ r=redis.Redis(unix_socket_path='/var/run/redis/redis.sock')
 class AgedQueue(process):
   import string
   import random
-  def __init__(self,name='queue',ival=0.001,MaxSize=0,ratio=1,latency=0):
+  def __init__(self,name='queue',ival=0.001,MaxSize=0,ratio=1,latency=0,age=0):
     self.size=0
     self.ival=ival
     self.MaxSize = MaxSize
     self.name=name
     self.ratio = ratio
+    self.latency = latency
+    self.age=age
     self.xid=self.randtoken()
     self.queuename="queue:"+self.xid+":("+self.name+")"
     self.aqueuename="aqueue:"+self.xid+":("+self.name+")"
@@ -57,7 +59,7 @@ class AgedQueue(process):
       w=float(e)
       ulimit=float(self.getsimtime())*1000
       self.unlock(lock)
-      if ulimit - w > 10:
+      if ulimit - w > self.age:
          print "Dropping Packet", ulimit,w,ulimit-w
          self.garbage.put(key)
       else:
@@ -90,8 +92,9 @@ class AgedQueue(process):
 class LatencyQueue(process):
   import string
   import random
-  def __init__(self,name='queue',ival=0.001,MaxSize=0,ratio=1,latency=0):
+  def __init__(self,name='queue',ival=0.001,MaxSize=0,ratio=1,latency=0,age=0):
     self.latency=latency 
+    self.age=age
     self.size=0
     self.ival=ival
     self.MaxSize = MaxSize
@@ -399,7 +402,7 @@ class stack(object):
 
 
 class duplex(process):
-   def __init__(self, name,ival=0.001,start=0,stop=0,ratelimit=0,MaxSize=0,ratio=1,latency=0,debug=False):
+   def __init__(self, name,ival=0.001,start=0,stop=0,ratelimit=0,MaxSize=0,ratio=1,latency=0,age=0,debug=False):
       self.name = name
       self.ival = ival
       self.start = start
@@ -412,11 +415,16 @@ class duplex(process):
          self.b = LatencyQueue(name=self.name+':b',MaxSize=MaxSize,ratio=ratio,latency=latency/2)
          self.c = LatencyQueue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio,latency=latency/2)
          self.d = LatencyQueue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio,latency=latency/2)
+      elif age > 0:
+         self.a = AgedQueue(name=self.name+':a',MaxSize=MaxSize,ratio=ratio,age=age) # ratio of stored bytes to application bytes
+         self.b = AgedQueue(name=self.name+':b',MaxSize=MaxSize,ratio=ratio,age=age)
+         self.c = AgedQueue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio,age=age)
+         self.d = AgedQueue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio,age=age)
       else:
-         self.a = AgedQueue(name=self.name+':a',MaxSize=MaxSize,ratio=ratio) # ratio of stored bytes to application bytes
-         self.b = AgedQueue(name=self.name+':b',MaxSize=MaxSize,ratio=ratio)
-         self.c = AgedQueue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio)
-         self.d = AgedQueue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio)
+         self.a = Queue(name=self.name+':a',MaxSize=MaxSize,ratio=ratio) # ratio of stored bytes to application bytes
+         self.b = Queue(name=self.name+':b',MaxSize=MaxSize,ratio=ratio)
+         self.c = Queue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio)
+         self.d = Queue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio)
 
       connector(name+':dup1',self.a,self.b,self.inspectA,self.ratelimit,ratio=ratio) # a -> b, forward from interface A to interface B
       connector(name+':dup2',self.d,self.c,self.inspectB,self.ratelimit,ratio=ratio) # c -> d, reverse from interface B to interface A

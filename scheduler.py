@@ -81,8 +81,11 @@ class scheduler(object):
             self.process_100msticks()
             self.syncdb()
             self.scanp()
+#         else:
+#            time.sleep(0.1)
          if self.wait > 0:
             time.sleep(self.wait)
+      
       self.setinactive()
       print "simtime",self.simtime,"finish",self.finish
 

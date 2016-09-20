@@ -15,8 +15,8 @@ class tcpgen(datalink):
 
    @threaded
    def worker1(self):
-      payload="A"*150
-      for count in range(1,5000):
+      payload="A"*200
+      for count in range(1,90000):
          now = stime=self.waittick()
 #         timlock,now=self.lock()
          load='%d:%s:%s'%(count,now,payload)
@@ -25,7 +25,7 @@ class tcpgen(datalink):
          r.hset("pkt:%07d"%count ,"sendtime",now)
          self.conn.send(load)
 #         self.unlock(timlock)
-      self.waitfor(9000)
+      self.waitfor(1000)
       print "closing"
       self.conn.close()
                
@@ -50,12 +50,12 @@ class tcpterm(datalink):
 
 print conf.netcache.arp_cache
 
-sched=scheduler(tick=0.001,finish=10)
+sched=scheduler(tick=0.001,finish=100)
 
 tcpxmit=tcpgen('tcpxmit',stop=3.0)
 tcprecv=tcpterm('tcprecv')
 
-scenario=7
+scenario=0
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)
 
