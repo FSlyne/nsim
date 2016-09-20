@@ -45,6 +45,8 @@ class TCPSocket(process):
         self.bulksend()
         self.statscollector()
         self.garbage=Queue()
+        self.ackdict = {}
+        self.seq_sndtime = {}
         self.ackmgr()
         self.cleanup()
 
@@ -62,10 +64,23 @@ class TCPSocket(process):
     @threaded
     def statscollector(self):
       f = open("tcpstats_%s.log" % self.listener.ip_address, "w")
-      f.write("ms\tcwnd\tssthresh\n")
+      f.write("ms\tcwnd\tssth\trtt(ms)\n")
       while True:
+         stime = 0; scount = 0
          self.wait100mstick()
-         f.write("%0.3f\t%s\t%s\n" %(float(self.getsimtime()),str(self.window),str(self.ssthresh)))
+         s=list(self.seq_sndtime.keys())
+         for seq in s:
+            key="rcvtime:"+str(seq)
+            rcvtime=self.r.get(key)
+            if rcvtime:
+               stime += float(rcvtime) - float(self.seq_sndtime[seq])
+               scount+=1
+               del self.seq_sndtime[seq]
+         if scount == 0:
+            rtt = 0
+         else:
+            rtt = float(2000 * stime/scount)
+         f.write("%0.3f\t%s\t%s\t%0.3f\n" %(float(self.getsimtime()),str(self.window),str(self.ssthresh),rtt))
       f.close()
         
     @staticmethod
@@ -163,6 +178,7 @@ class TCPSocket(process):
        while True:
           payload=self.r.blpop("inbuf:"+self.xid)[1]
           self.r.set("seq:"+self.xid+":"+str(self.seq),payload)
+          self.seq_sndtime[self.seq] = self.getsimtime()
           self.retranQ.add(self.seq)
           self._send_ack(load=payload, flags='')
           self.seq += len(payload)
@@ -194,6 +210,7 @@ class TCPSocket(process):
         # Add the IP header
         full_packet = Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')/self.ip_header / packet / payload
         self.listener.send(full_packet)
+        self.seq_sndtime[self.seq] = self.getsimtime()
                 
 
     def _send(self, flags="", load=None):
@@ -213,6 +230,7 @@ class TCPSocket(process):
             full_packet = full_packet / load
         # Send the packet over the wire
         self.listener.send(full_packet)
+        self.seq_sndtime[self.seq] = self.getsimtime()
         # Update the sequence number with the number of bytes sent
 #        if load is not None:
 #            self.seq += len(load)
@@ -290,8 +308,10 @@ class TCPSocket(process):
         if self._has_load(packet):
 #            self.recv_buffer += packet.load # Officially received ????
             self.r.rpush("recvbuf:"+self.xid,packet.load)
-            packet.show()
-            self.r.set("ack:"+self.xid+":"+"%010d"% packet.seq,len(packet.load))
+            self.r.set("rcvtime:"+str(packet.seq),self.getsimtime())
+#            packet.show()
+#            self.r.set("ack:"+self.xid+":"+"%010d"% packet.seq,len(packet.load))
+            self.ackdict["ack:"+self.xid+":"+"%010d"% packet.seq] = len(packet.load)
 #               self._send_ack()
         elif "R" in recv_flags:
             self._close()
@@ -351,11 +371,14 @@ class TCPSocket(process):
       while True:
         lock,now=self.lock()
         x=[]; y=[]
-        l = self.r.keys(pattern="ack:"+self.xid+":*")
+#        l = self.r.keys(pattern="ack:"+self.xid+":*")
+        l = list(self.ackdict.keys())
         l.sort()
         for e in l:
            seq=int(e.split(':')[-1:][0].lstrip("0"))
-           val=int(self.r.get("ack:"+self.xid+":"+"%010d" % seq))
+#           val=int(self.r.get("ack:"+self.xid+":"+"%010d" % seq))
+           val=self.ackdict["ack:"+self.xid+":"+"%010d" % seq]
+#           del self.ackdict["ack:"+self.xid+":"+"%010d" % seq]
            x.append(seq); y.append(seq+val)
         if x:
 #           print "*:",x,"+:",y
@@ -371,7 +394,7 @@ class TCPSocket(process):
                 break
               if w == v:
                 end = w
-#           print "ack window: ",end-start,end, start
+#           print "ack window: ",end-start,end, start,self.cwnd
            if end-start >= self.cwnd:
               self.ack = end+1
               self._send_ack()
@@ -380,8 +403,7 @@ class TCPSocket(process):
                  if seq <= end:
 #                    print "deleting:", "ack:"+self.xid+":"+"%010d" % seq
                     key="ack:"+self.xid+":"+"%010d" % seq
-                    self.garbage.put(key)
-#                    self.r.delete(key)
+                    del self.ackdict["ack:"+self.xid+":"+"%010d" % seq]
         self.unlock(lock)
         self.waitfor(5)
 
@@ -418,7 +440,7 @@ class retransmission(process):
              self.remove(seq)
              self.add2(seq)
           else:
-             self.waitfor(1)
+             self.waitfor(10)
 
     @threaded
     def routine2(self):
@@ -430,7 +452,7 @@ class retransmission(process):
              self.remove2(seq)
 #             self.add(seq)
           else:
-             self.waitfor(1)
+             self.waitfor(10)
 
     def remove(self,seq):
        key="seq:"+self.xid+":"+str(seq)
@@ -462,11 +484,11 @@ class retransmission(process):
     def cleardown(self,threshseq):
        print "received threshseq ",threshseq,self.getsimtime()
        tally=0
-       for seq,tick in self.r.zrangebyscore(self.queue, 0 ,str(100000),withscores=True):
+       for seq,tick in self.r.zrangebyscore(self.queue, 0 ,str(100000000),withscores=True):
          if int(seq) <= int(threshseq):
             status,size = self.remove(seq)
             tally+=size
-       for seq,tick in self.r.zrangebyscore(self.queue2, 0 ,str(100000),withscores=True):
+       for seq,tick in self.r.zrangebyscore(self.queue2, 0 ,str(100000000),withscores=True):
          if int(seq) <= int(threshseq):
             status,size =self.remove2(seq)
             tally+=size

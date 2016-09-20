@@ -270,12 +270,13 @@ class vswitch(object):
           super(vswitch.vswitch_down, self).__init__(*args, **kwargs)
 
        def inspectA(self,stream,name):
+          return stream # !!!!!!!!!!!!
           stream1=stream.decode("HEX")
           stream1=Ether(stream1)
           p=manip(stream1,self.name)
           if self.debug:
             print "inspectA2a",name,p.struct,"\n"
-          p.settun(self.tagB,self.tagA)
+          p.settun("","")
           p.build()
           if self.debug:
             print "inspectA2b",name,p.struct,"\n"
@@ -283,12 +284,13 @@ class vswitch(object):
           return stream
 
        def inspectB(self,stream,name):
+          return stream # !!!!!!!!!!!!
           stream1=stream.decode("HEX")
           stream1=Ether(stream1)
           p=manip(stream1,self.name)
           if self.debug:
              print "inspectB2a",name,p.struct
-          p.settun(self.tagA,self.tagB)
+          p.settun("","")
           p.build()
           if self.debug:
             print "inspectB2b",name,p.struct
@@ -345,6 +347,7 @@ class host(object):
             ip=eth[IP]
             udp=ip[UDP]
           except:
+            eth.show()
             return "Host Error"
 #          stream=str(payload).encode("HEX")
           return str(udp.payload)
@@ -362,7 +365,7 @@ class manip(object):
       self.name=name
       self.tunlist=['PPP','PPPoE','MPLS','Dot1Q','Ether']
       self.valid_protos=["Ether","IP","MPLS","Dot1Q","PPPoE","UDP","TCP"]
-      self.attributes=["src","dst","sport","dport"]
+      self.attributes=["src","dst","sport","dport","seq","ack","dataofs","flags","window"]
       self.align()
       
    def align(self):
@@ -447,6 +450,9 @@ class manip(object):
       self.pkt.hide_defaults()
       self.clean()
       structline="/".join(self.struct)
+#      print "======================== Before ============================="
+#      print structline
+#      self.pkt.show()
       try:
          pkt=eval(structline)
       except:
@@ -454,7 +460,10 @@ class manip(object):
          print "Packet Build exception:",structline
          print self.struct
       self.pkt=pkt
+#      print "======================  After ==============================="
+#      self.pkt.show()
       self.align()
+     
 
    def addtun(self,tunlayer):
       n,m,a=self.find_hitun()

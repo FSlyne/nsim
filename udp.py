@@ -1,16 +1,17 @@
 from scapy.all import *
 from network import *
 
-sched=scheduler(tick=0.001,finish=10)
+sched=scheduler(tick=0.001,finish=2)
 
 host1=host('host1',stack='udp')
 host2=host('host2',stack='udp')
 
 traf=trafgen('traf1',ms1=1)
+# traf=trafgen('traf1',once=1)
 # traf=trafgen('traf1')
 term2=terminal('term2')
 
-scenario=3
+scenario=6
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)
 
@@ -105,6 +106,8 @@ elif scenario == 9:
   connect('c6',metroswitch.B,coreswitch.A)
   connect('c8',host1.A,cpe.A)
   connect('c9',host2.A,coreswitch.B)
+  connect('hostcon1',host1.B,traf.B)
+  connect('hostcon2',host2.B,term2.A)
 
 
 sched.process()

@@ -42,7 +42,7 @@ class tcpterm(datalink):
    def worker(self):
       while True:
          item=str(self.conn.recv(10000,timeout=1))
-         print item
+#         print item
          timlock,now=self.lock()
          count,sendnow,payload=item.split(':')
          r.hset("pkt:%07d"%int(count),"recvtime",now)
@@ -56,7 +56,7 @@ sched=scheduler(tick=0.001,finish=10)
 tcpxmit=tcpgen('tcpxmit',stop=3.0)
 tcprecv=tcpterm('tcprecv')
 
-scenario=3
+scenario=7
 
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)
@@ -109,6 +109,40 @@ elif scenario == 7:
   connect('con3',sw2.B,link2.A)
   connect('con3',link2.B,sw3.A)
   connect('con4',sw3.B,tcprecv.A)
+elif scenario == 8: # classic architecture
+  pon=datalink('pon',latency=10)
+  onu=vswitch('onu',"","Dot1Q()")
+  olt=vswitch('olt',"Dot1Q()","")
+  cpe=vswitch('cpe',"","Dot1Q()")
+  bras=vswitch('bras',"Dot1Q()","")
+  homerouter=router('hr')
+  metrorouter=vswitch('mr',"","MPLS()")
+  corerouter=vswitch('cr',"MPLS()","")
+  connect('c1',homerouter.B,cpe.A)
+  connect('c2',cpe.B,onu.A)
+  connect('c3',onu.B,pon.A)
+  connect('c4',pon.B,olt.A)
+  connect('c5',olt.B,bras.A)
+  connect('c6',bras.B,metrorouter.A)
+  connect('c7',metrorouter.B,corerouter.A)
+  connect('c8',tcpxmit.B,homerouter.A)
+  connect('c9',tcprecv.A,corerouter.B)
+elif scenario == 9: # 
+  pon=datalink('pon',latency=10)
+  onu=vswitch('onu',"","Dot1Q()")
+  olt=vswitch('olt',"Dot1Q()","")
+  cpe=eth_switch('cpe')
+  accessswitch=eth_switch('as')
+  metroswitch=eth_switch('ms')
+  coreswitch=eth_switch('cs')
+  connect('c1',cpe.B,onu.A)
+  connect('c2',onu.B,pon.A)
+  connect('c3',pon.B,olt.A)
+  connect('c4',olt.B,accessswitch.A)
+  connect('c5',accessswitch.B,metroswitch.A)
+  connect('c6',metroswitch.B,coreswitch.A)
+  connect('c8',tcpxmit.B,cpe.A)
+  connect('c9',tcprecv.A,coreswitch.B)
 
 
 sched.process()
