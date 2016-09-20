@@ -1,10 +1,11 @@
-import Queue
+from Queue import *
 import threading
 import time
 import random
 import sys
 import inspect
 import redis
+import os
 from scheduler import *
 from utilities import *
 from scapy.all import *
@@ -173,7 +174,7 @@ class LatencyQueue(process):
     return self.qsize() == 0
 
 
-class Queue():
+class Queue2():
   import string
   import random
 
@@ -213,6 +214,43 @@ class Queue():
 
   def empty(self):
     return self.qsize() == 0
+
+class NQueue():
+  import string
+  import random
+
+  def __init__(self,name='queue',ival=0.001,MaxSize=0,ratio=1):
+    self.ival=ival
+    self.MaxSize = MaxSize
+    self.name=name
+    self.ratio = ratio
+    self.size=0
+    self.queue=Queue()
+
+  def randtoken(self,size=6, chars=string.ascii_uppercase + string.digits):
+    return ''.join(self.random.choice(chars) for _ in range(size))
+
+  def put(self,item):
+    if self.MaxSize > 0:
+       if self.qsize() > self.MaxSize:
+          return False
+    self.queue.put(item)
+    self.size+=len(item)
+    return True
+
+  def get(self, block=True, timeout=None):
+    item=self.queue.get()
+    self.size=self.size-len(item)
+    return item
+
+  def qsize(self):
+    # ratio is ratio of actual bytes to application bytes
+#    return int(r.llen(self.queuename))/self.ratio
+    return int(self.queue.qsize()/self.ratio)
+
+  def empty(self):
+    return self.qsize() == 0
+
 
 def threaded(fn):
     def wrapper(*args, **kwargs):
@@ -421,10 +459,10 @@ class duplex(process):
          self.c = AgedQueue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio,age=age)
          self.d = AgedQueue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio,age=age)
       else:
-         self.a = Queue(name=self.name+':a',MaxSize=MaxSize,ratio=ratio) # ratio of stored bytes to application bytes
-         self.b = Queue(name=self.name+':b',MaxSize=MaxSize,ratio=ratio)
-         self.c = Queue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio)
-         self.d = Queue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio)
+         self.a = NQueue(name=self.name+':a',MaxSize=MaxSize,ratio=ratio) # ratio of stored bytes to application bytes
+         self.b = NQueue(name=self.name+':b',MaxSize=MaxSize,ratio=ratio)
+         self.c = NQueue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio)
+         self.d = NQueue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio)
 
       connector(name+':dup1',self.a,self.b,self.inspectA,self.ratelimit,ratio=ratio) # a -> b, forward from interface A to interface B
       connector(name+':dup2',self.d,self.c,self.inspectB,self.ratelimit,ratio=ratio) # c -> d, reverse from interface B to interface A

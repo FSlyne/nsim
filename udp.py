@@ -10,7 +10,7 @@ traf=trafgen('traf1',ms1=1)
 # traf=trafgen('traf1')
 term2=terminal('term2')
 
-scenario=8
+scenario=3
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)
 

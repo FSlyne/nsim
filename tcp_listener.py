@@ -49,7 +49,6 @@ class TCPListener(object):
             packet=str(packet).encode("HEX")
             self.xmit(packet)
          except:
-            packet.show()
             print "packet encoding exception"
             packet.show()
 

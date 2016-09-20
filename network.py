@@ -164,7 +164,7 @@ class router(object):
           stream1=Ether(stream1)
           p=manip(stream1)
           p.swaplayer(0,"Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')")
-          p.build
+          p.build()
           stream=str(p.pkt).encode("HEX")
           return stream
 
@@ -276,7 +276,7 @@ class vswitch(object):
           if self.debug:
             print "inspectA2a",name,p.struct,"\n"
           p.settun(self.tagB,self.tagA)
-          p.build
+          p.build()
           if self.debug:
             print "inspectA2b",name,p.struct,"\n"
           stream=str(p.pkt).encode("HEX")
@@ -289,7 +289,7 @@ class vswitch(object):
           if self.debug:
              print "inspectB2a",name,p.struct
           p.settun(self.tagA,self.tagB)
-          p.build
+          p.build()
           if self.debug:
             print "inspectB2b",name,p.struct
           stream=str(p.pkt).encode("HEX")
@@ -347,7 +347,7 @@ class host(object):
           except:
             return "Host Error"
 #          stream=str(payload).encode("HEX")
-          return udp.payload
+          return str(udp.payload)
 
        def inspectB(self,payload,name):
 #          print "payload B:",payload
@@ -362,7 +362,7 @@ class manip(object):
       self.name=name
       self.tunlist=['PPP','PPPoE','MPLS','Dot1Q','Ether']
       self.valid_protos=["Ether","IP","MPLS","Dot1Q","PPPoE","UDP","TCP"]
-      self.attributes=["src","dst","sport","dport","flags","window","seq","ack","dataofs"]
+      self.attributes=["src","dst","sport","dport"]
       self.align()
       
    def align(self):

@@ -2,6 +2,7 @@ from scapy.all import *
 from queue import *
 import random
 import time
+from Queue import *
 
 host = '127.0.0.1'
 port = '6379'
@@ -63,7 +64,7 @@ class TCPSocket(process):
       f = open("tcpstats_%s.log" % self.listener.ip_address, "w")
       f.write("ms\tcwnd\tssthresh\n")
       while True:
-         self.wait10mstick()
+         self.wait100mstick()
          f.write("%0.3f\t%s\t%s\n" %(float(self.getsimtime()),str(self.window),str(self.ssthresh)))
       f.close()
         
@@ -180,13 +181,17 @@ class TCPSocket(process):
         payload=self.r.get("seq:"+self.xid+":"+str(seq))
         if not payload:
            return
+
+        # Window Scaling RFC 1323
+        rewin,shft = self.enscale(self.window)
         
         packet = TCP(dport=self.dest_port,
                      sport=self.src_port,
                      seq=int(seq),
                      ack=self.last_ack_sent,
                      flags=flags,
-                     window=self.window)
+                     window=rewin,
+                     options=[('WScale', shft)])
         # Add the IP header
         full_packet = Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')/self.ip_header / packet / payload
         self.listener.send(full_packet)
@@ -194,12 +199,16 @@ class TCPSocket(process):
 
     def _send(self, flags="", load=None):
         """Every packet we send should go through here."""
+        # Window Scaling RFC 1323
+        rewin,shft = self.enscale(self.window)
+
         packet = TCP(dport=self.dest_port,
                      sport=self.src_port,
                      seq=self.seq,
                      ack=self.last_ack_sent,
                      flags=flags,
-                     window=self.window)
+                     window=rewin,
+                     options=[('WScale', shft)])
         full_packet = Ether(src='00:00:00:00:00:00',dst='00:00:00:00:00:00')/self.ip_header / packet
         # Add the payload
         if load:
@@ -238,6 +247,27 @@ class TCPSocket(process):
         self.state = "CLOSED"
         self.listener.close(self.src_ip, self.src_port)
 
+    def enscale (self,window):
+        shft = 0
+        rewin = window
+        for shft in range(0,15):
+           if rewin <= 65535:
+              break
+           rewin = rewin >> 1
+        return rewin,shft
+
+    def descale(self,rewin,shft):
+        return rewin << shft
+
+    def find_tcp_option(self,key, default,options):
+         for opt in options:
+            if opt == key:
+                return None
+            if opt[0] == key:
+                return opt[1]
+         return default
+
+
     def handle(self, packet):
         # Handle incoming packets
         lock,now=self.lock()
@@ -249,7 +279,7 @@ class TCPSocket(process):
 
         self.last_ack_sent = max(self.next_seq(packet), self.last_ack_sent)
         self.last_ack_recv = packet.ack
-        self.cwnd = packet.window
+        self.cwnd = self.descale(packet.window,self.find_tcp_option('WScale',0,packet[TCP].options))
 
         recv_flags = packet.sprintf("%TCP.flags%")
 
@@ -261,6 +291,7 @@ class TCPSocket(process):
         if self._has_load(packet):
 #            self.recv_buffer += packet.load # Officially received ????
             self.r.rpush("recvbuf:"+self.xid,packet.load)
+            packet.show()
             self.r.set("ack:"+self.xid+":"+"%010d"% packet.seq,len(packet.load))
 #               self._send_ack()
         elif "R" in recv_flags:
@@ -323,10 +354,14 @@ class TCPSocket(process):
         x=[]; y=[]
         l = self.r.keys(pattern="ack:"+self.xid+":*")
         l.sort()
-#        print l
+        print l
         for e in l:
-           seq=int(e.split(':')[-1:][0].lstrip("0"))
-           val=int(self.r.get("ack:"+self.xid+":"+"%010d" % seq))
+           try:
+              seq=int(e.split(':')[-1:][0].lstrip("0"))
+              val=int(self.r.get("ack:"+self.xid+":"+"%010d" % seq))
+           except:
+              print e
+              print "Seq Error",seq
            x.append(seq); y.append(seq+val)
         if x:
 #           print "*:",x,"+:",y
