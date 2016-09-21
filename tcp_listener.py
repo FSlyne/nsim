@@ -76,6 +76,8 @@ class TCPListener(object):
            # listen on the wire
            packet=self.recv()
            packet=Ether(str(packet).decode("HEX"))
+           if packet.dst == '11:22:33:44:55:66':
+              continue
 #           packet=IP(str(packet).decode("HEX"))
            if self.debug:
               print "+++++ Receiving Packets on Wire ++++++++"

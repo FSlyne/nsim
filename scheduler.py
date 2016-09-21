@@ -294,11 +294,14 @@ class scheduler(object):
             pattern=e+":*"
             l=self.r.keys(pattern)
             l.sort()
-            f=l[-1:][0] #
-            b = int(self.r.get(f))*10 # 100th second * 10
-            f=e.split(':')
-            unit=f[0]+'ps:'+f[1]+'ps:'+":".join(f[2:])+':now'
-            self.r.set(unit,b)
+            try:
+               f=l[-1:][0] #
+               b = int(self.r.get(f))*10 # 100th second * 10
+               f=e.split(':')
+               unit=f[0]+'ps:'+f[1]+'ps:'+":".join(f[2:])+':now'
+               self.r.set(unit,b)
+            except:
+               print "Calcbitrate Exception"
          self.unlock(timlock)
       return
 

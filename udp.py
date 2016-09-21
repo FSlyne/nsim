@@ -11,7 +11,7 @@ traf=trafgen('traf1',ms1=1)
 # traf=trafgen('traf1')
 term2=terminal('term2')
 
-scenario=6
+scenario=8
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)
 
@@ -88,8 +88,8 @@ elif scenario == 8: # classic architecture
   connect('c5',olt.B,bras.A)
   connect('c6',bras.B,metrorouter.A)
   connect('c7',metrorouter.B,corerouter.A)
-  connect('c8',host1.A,homerouter.A)
-  connect('c9',host2.A,corerouter.B)
+  connect('c8',host2.A,homerouter.A)
+  connect('c9',host1.A,corerouter.B)
 elif scenario == 9:
   pon=datalink('pon',latency=10)
   onu=vswitch('onu',"","Dot1Q()")

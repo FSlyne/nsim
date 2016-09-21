@@ -347,6 +347,7 @@ class host(object):
             ip=eth[IP]
             udp=ip[UDP]
           except:
+            print "Got Something other than UDP and IP"
             eth.show()
             return "Host Error"
 #          stream=str(payload).encode("HEX")

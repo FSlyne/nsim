@@ -383,6 +383,14 @@ class connect(object):
    def inspect(self,item,name):
        return item
 
+class halfconnect(object):
+   def __init__(self,name,X,Y,ratelimit=0,ratio=1):
+      connector(name+':nect1',X.outq,Y.inq,self.inspect,ratelimit=ratelimit,ratio=1)
+
+   def inspect(self,item,name):
+       return item
+
+
 class loopback(object):
    def __init__(self,name,X):
       connector(name+':loopback1',X.outq,X.inq,self.inspect)
