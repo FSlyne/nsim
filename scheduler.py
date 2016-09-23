@@ -281,7 +281,7 @@ class scheduler(object):
    @threaded
    def calcbitrate(self):
       while True:
-         simtime=self.wait10mstick()
+         simtime=self.wait100mstick()
          timlock,now=self.lock()
          l = self.r.keys(pattern='stats:*')
          m=[]
@@ -451,37 +451,46 @@ class process(object):
   def writedb(self,attr,value):
     self.r.set(attr,str(value))
 
+  def getval(self,attr):
+    try:
+      v = self.r.get(attr)
+    except:
+      v=0
+    return v
+
 
   def updatestats(self,elem,bits,units): # bits
     val=float(self.r.get("simbuck"))
     fval = "%08.1f" % val
     cursec="stats:"+units+':'+elem+':'+str(fval)
     try:
-      curval=int(self.r.get(cursec))
-      curval+=bits
-      curval=int(curval)
+      self.r.incrby(cursec,str(bits))
+      self.r.expire(cursec,100)
+      cursec="stats:"+units+':tally'
+      self.r.incrby(cursec,str(bits))
     except:
-      curval=int(bits)
-    self.r.set(cursec,str(curval))
-    self.r.expire(cursec,100)
-    return curval
+       print "update stats error"
+    return 
 
   def getstats(self,elem,units):
     bits=0
-    pattern="stats:"+units+':'+elem+':*'
+    try:
+       pattern="stats:"+units+':'+elem+':*'
 #    l=list(self.r.scan_iter(match=pattern))
-    l=self.r.keys(pattern)
-    l.sort()
-    l=l[-10:] # get the last 10 keys
-    for e in l:
-       try:
-         b = self.r.get(e)
-         bits+=int(b)    
-       except:
-         pass
-    if len(l) > 0:
-       bits=bits*10/len(l) # scale up
+       l=self.r.keys(pattern)
+       l.sort()
+       l=l[-10:] # get the last 10 keys
+       for e in l:
+          try:
+            b = self.r.get(e)
+            bits+=int(b)    
+          except:
+            pass
+       if len(l) > 0:
+          bits=bits*10/len(l) # scale up
 #    self.r.set("statsps:"+units+"ps:"+elem,bits)
+    except:
+       bits=0
     return bits
 
 

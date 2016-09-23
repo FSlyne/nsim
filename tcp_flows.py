@@ -15,7 +15,7 @@ class tcpgen(datalink):
 
    @threaded
    def worker1(self):
-      payload="A"*20
+      payload="A"*200
       for count in range(1,90000):
          now = stime=self.waittick()
 #         timlock,now=self.lock()
@@ -145,7 +145,7 @@ elif scenario == 3: # New Arch
   #
   connect('flow',flowgen.B, host3.B)
   halfconnect('con3',host3.A, coreswitch.B)
-elif scenario == 4: # New Arch
+elif scenario == 4: # New Arch - TCP
   pon=datalink('pon',latency=2)
   link1=datalink('link1',latency=2)
   link2=datalink('link2',latency=2)
@@ -170,9 +170,6 @@ elif scenario == 4: # New Arch
   #
   connect('flow',flowgen.B, host3.B)
   halfconnect('con3',host3.A, coreswitch.B)
-
-
-
 
 sched.process()
 

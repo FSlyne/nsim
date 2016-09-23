@@ -32,7 +32,7 @@ class AgedQueue(process):
     self.name=name
     self.ratio = ratio
     self.latency = latency
-    self.age=age
+    self.age=float(age)
     self.xid=self.randtoken()
     self.queuename="queue:"+self.xid+":("+self.name+")"
     self.aqueuename="aqueue:"+self.xid+":("+self.name+")"
@@ -60,7 +60,9 @@ class AgedQueue(process):
       w=float(e)
       ulimit=float(self.getsimtime())*1000
       self.unlock(lock)
+#      print ulimit,w,self.age
       if ulimit - w > self.age:
+         self.updatestats(self.name,1,'pktdrp_age')
          print "Dropping Packet", ulimit,w,ulimit-w
          self.garbage.put(key)
       else:
@@ -174,7 +176,7 @@ class LatencyQueue(process):
     return self.qsize() == 0
 
 
-class Queue2():
+class NQueue():
   import string
   import random
 
@@ -209,13 +211,13 @@ class Queue2():
 
   def qsize(self):
     # ratio is ratio of actual bytes to application bytes
-    return int(r.llen(self.queuename))/self.ratio
-#    return int(self.size/self.ratio)
+#    return int(r.llen(self.queuename))/self.ratio
+    return self.size/self.ratio
 
   def empty(self):
     return self.qsize() == 0
 
-class NQueue():
+class NQueue2():
   import string
   import random
 
@@ -246,7 +248,7 @@ class NQueue():
   def qsize(self):
     # ratio is ratio of actual bytes to application bytes
 #    return int(r.llen(self.queuename))/self.ratio
-    return int(self.queue.qsize()/self.ratio)
+    return int(self.size/self.ratio)
 
   def empty(self):
     return self.qsize() == 0
@@ -264,7 +266,7 @@ def debug(line):
       print line
 
 class connector(process):
-   def __init__(self,name,a,b,inspect,ratelimit=0,ratio=1):
+   def __init__(self,name,a,b,inspect,ratelimit=0,ratio=1,usebackpressure=False):
       self.a = a
       self.b = b
       self.name = name
@@ -272,43 +274,52 @@ class connector(process):
       self.inspect=inspect
       self.ratelimit=ratelimit
       self.qsize=0
+      self.usebackpressure = usebackpressure
       process.__init__(self,0)
       self.worker()
 
    @threaded
    def worker(self):
       while self.isactive:
-         timlock,now=self.lock()
-#         bps=self.getbps(self.name)
          try:
             self.qsize=max(self.a.qsize(),self.qsize)
          except:
             self.qsize=self.a.qsize()
          self.updatestats(self.name,0,'bits')
-         self.unlock(timlock)
-         if self.b.MaxSize > 0 and self.b.qsize() >= self.b.MaxSize: # Back Pressure
-            self.waitfor(10) # msec
-#            print "Back Pressure", self.b.qsize(), self.b.MaxSize
-            continue
+         if self.usebackpressure:
+            if self.b.MaxSize > 0:
+               if self.b.qsize() >= self.b.MaxSize:
+                  print "Back Pressure", self.name,self.a.qsize(),self.b.qsize(), self.b.MaxSize
+                  self.updatestats(self.name,1,'bkprs')
+                  self.waitfor(1) # msec
+                  continue
 #         if self.ratelimit > 0:
 #            print self.getstats(self.name,'bits'), self.ratelimit
+#         if float(self.getsimtime()) > 0.5:
+#             print self.name
          if self.ratelimit > 0 and self.getstats(self.name,'bits') > self.ratelimit: # Rate Limit
-            self.waitfor(10) # clock ticks
+#            print "Rate limiting", self.name,self.getstats(self.name,'bits')
+            self.waitfor(1) # clock ticks
+            self.updatestats(self.name,1,'rtlmt')
             continue
-#         timlock,now=self.lock()
+#         if 'cs_Aside' in self.name:
+#            print "prior to CS get",self.name
          item=self.a.get()
+#         if 'cs_Aside' in self.name:
+#            print "after CS get",self.name
          item=self.inspect(item,self.name) # Careful about putting the inspect within the lock
          if len(item) == 0:
             # This is to catch Dropped packets from host
             continue
-
+  
          self.updatestats(self.name,len(item)*8/self.ratio,'bits') # 2 chars = 8 bits
 #         print item,self.ratio,len(item)*8/self.ratio
 
          if not self.b.put(item):
-            self.updatestats(self.name,1,'pktdrp')
-
-#         self.unlock(timlock)
+            pass
+            print self.name,"Dropping Packets"
+            self.updatestats(self.name,1,'pktdrp_mxq')
+      print "Thread Finishing !!!"
 
 class xhub(object):
    def __init__(self,name,L):
@@ -376,16 +387,16 @@ class hub(object):
          t.put(item)
       
 class connect(object):
-   def __init__(self,name,X,Y,ratelimit=0,ratio=1):
-      connector(name+':nect1',X.outq,Y.inq,self.inspect,ratelimit=ratelimit,ratio=1)
-      connector(name+':nect2',Y.outq,X.inq,self.inspect,ratelimit=ratelimit,ratio=1)
+   def __init__(self,name,X,Y,ratelimit=0,ratio=1,usebackpressure=True):
+      connector(name+':nect1',X.outq,Y.inq,self.inspect,ratelimit=ratelimit,ratio=1,usebackpressure=usebackpressure)
+      connector(name+':nect2',Y.outq,X.inq,self.inspect,ratelimit=ratelimit,ratio=1,usebackpressure=usebackpressure)
 
    def inspect(self,item,name):
        return item
 
 class halfconnect(object):
-   def __init__(self,name,X,Y,ratelimit=0,ratio=1):
-      connector(name+':nect1',X.outq,Y.inq,self.inspect,ratelimit=ratelimit,ratio=1)
+   def __init__(self,name,X,Y,ratelimit=0,ratio=1,usebackpressure=True):
+      connector(name+':nect1',X.outq,Y.inq,self.inspect,ratelimit=ratelimit,ratio=1,usebackpressure=usebackpressure)
 
    def inspect(self,item,name):
        return item
@@ -448,7 +459,7 @@ class stack(object):
 
 
 class duplex(process):
-   def __init__(self, name,ival=0.001,start=0,stop=0,ratelimit=0,MaxSize=0,ratio=1,latency=0,age=0,debug=False):
+   def __init__(self, name,ival=0.001,start=0,stop=0,ratelimit=0,MaxSize=0,ratio=1,latency=0,age=0,debug=False,usebackpressure=False):
       self.name = name
       self.ival = ival
       self.start = start
@@ -472,8 +483,8 @@ class duplex(process):
          self.c = NQueue(name=self.name+':c',MaxSize=MaxSize,ratio=ratio)
          self.d = NQueue(name=self.name+':d',MaxSize=MaxSize,ratio=ratio)
 
-      connector(name+':dup1',self.a,self.b,self.inspectA,self.ratelimit,ratio=ratio) # a -> b, forward from interface A to interface B
-      connector(name+':dup2',self.d,self.c,self.inspectB,self.ratelimit,ratio=ratio) # c -> d, reverse from interface B to interface A
+      connector(name+':dup1',self.a,self.b,self.inspectA,self.ratelimit,ratio=ratio,usebackpressure=usebackpressure) # a -> b, forward from interface A to interface B
+      connector(name+':dup2',self.d,self.c,self.inspectB,self.ratelimit,ratio=ratio,usebackpressure=usebackpressure) # c -> d, reverse from interface B to interface A
 
       self.A=self.interface(name+':A',self.a,self.c,self) # a,c
       self.B=self.interface(name+':B',self.d,self.b,self) # d,b
@@ -610,13 +621,14 @@ class trafgen(duplex):
      count=0
      print "worker 4 starting"
      payload="Message !!"
+     payload="A"*200
      while True:
        stime=self.waittick()
        timlock,now=self.lock()
        load='%d:%s:%s'%(count,now,payload)
        loadbits=len(load)*8
        self.updatestats('trafbits',loadbits,'bits')
-       r.hset("pkt:%07d"%count ,"sendtime",now)
+       r.hset("pkt:%07d"%count ,"sendtime","%s:%d" %(now,len(payload)))
        self.A.put(load)
        count+=1
        self.unlock(timlock)
@@ -633,7 +645,7 @@ class terminal(duplex):
          item=self.B.get()
          timlock,now=self.lock()
          count,sendnow,payload=item.split(':') 
-         r.hset("pkt:%07d"%int(count),"recvtime",now)
+         r.hset("pkt:%07d"%int(count),"recvtime", now)
          item="Traffic Return: '%s:%s:%s'" % (str(count),str(sendnow),str(now))
          self.B.put(item)
          self.unlock(timlock)
@@ -644,8 +656,12 @@ class flowgen(duplex):
       stop=kwargs.get('stop',0)
       start=kwargs.get('start',0)
       ival=kwargs.get('ival',0.001)
+      fblimit=kwargs.get('fblimit',0.000)
       if 'flowcount' in kwargs:
          del kwargs['flowcount']
+      if 'fblimit' in kwargs:
+         del kwargs['fblimit']
+
       super(flowgen, self).__init__(*args, **kwargs)
 
       if stop == 0:
@@ -654,14 +670,26 @@ class flowgen(duplex):
       process.__init__(self,0)
 
       for i in range(0,flowcount):
-         self.worker(start+ival*i,stop)
+         self.worker(start+ival*i,stop,fblimit)
+
+   def getrate(self):
+      v = self.getval("statsps:bitsps:cpe_Aside:dup2:now")
+      try:
+        v=float(v)
+      except:
+        v=0.0
+      return float(v/1000000)
 
    @threaded
-   def worker(self,start,stop):
+   def worker(self,start,stop,fblimit):
      stime=self.waituntil(start)
+     v=self.getrate()
+     if fblimit > 0 and v > fblimit:
+        print "Flow rejected", fblimit, v
+        return
      count=0
-     print "flow starting !!!",stime
-     payload="Message !!"
+     print stime,"flow starting !!!",fblimit,v
+     payload="A"*200
      while True:
        stime=self.waittick()
        timlock,now=self.lock()

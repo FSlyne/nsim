@@ -40,6 +40,7 @@ class datalink(duplex):
          kwargs['ratelimit'] = 1000000*self.capacity
    
       kwargs['ratio'] = 2 # 2 chars in queue eqiv. 1 byte of application data
+      kwargs['usebackpressure'] = False
       super(datalink, self).__init__(*args, **kwargs)
 
    def inspectA(self,stream,name):
@@ -52,7 +53,7 @@ class datalink(duplex):
          bits=len(frame)*8
          if packet_drop(bits,self.ber):
             drop=True
-            self.updatestats(self.name,1,'pktdrp')
+            self.updatestats(self.name,1,'pktdrp_ber')
       if drop:
          stream=""
       elif self.trace:
@@ -71,7 +72,7 @@ class datalink(duplex):
          bits=len(frame)*8
          if packet_drop(bits,self.ber):
             drop=True
-            self.updatestats(self.name,1,'pktdrp')
+            self.updatestats(self.name,1,'pktdrp_ber')
       if drop:
          stream="" 
       elif self.trace:
@@ -98,11 +99,11 @@ class datalink(duplex):
 
 
 class eth_switch(object):
-   def __init__(self,name,profile=False):
+   def __init__(self,name,profile=False,MaxSize=0,age=0):
       self.name=name
       self.profile=profile
-      self.up=self.eth_up(name+'_Aside',profile=profile)
-      self.down=self.eth_down(name+'_Bside',profile=profile)
+      self.up=self.eth_up(name+'_Aside',profile=profile,MaxSize=MaxSize,age=age)
+      self.down=self.eth_down(name+'_Bside',profile=profile,MaxSize=MaxSize,age=age)
       self.A=self.up.A
       self.B=self.down.B
 
@@ -140,11 +141,11 @@ class eth_switch(object):
           return stream
 
 class router(object):
-   def __init__(self,name,profile=False):
+   def __init__(self,name,profile=False,MaxSize=0,age=0):
       self.name=name
       self.profile=profile
-      self.up=self.route_up(name+'_Aside',profile=profile)
-      self.down=self.route_down(name+'_Bside',profile=profile)
+      self.up=self.route_up(name+'_Aside',profile=profile,MaxSize=MaxSize,age=age,usebackpressure=True)
+      self.down=self.route_down(name+'_Bside',profile=profile,MaxSize=MaxSize,age=age,usebackpressure=True)
       self.A=self.up.A
       self.B=self.down.B
 
@@ -205,11 +206,11 @@ class router(object):
           return stream
          
 class vswitch(object):
-   def __init__(self,name,tagA="",tagB="",debug=False,profile=False):
+   def __init__(self,name,tagA="",tagB="",debug=False,profile=False,MaxSize=0,age=0):
       self.name=name
       self.profile=profile
-      self.up=self.vswitch_up(name+'_Aside',tagA=tagA,tagB=tagB,debug=debug,profile=profile)
-      self.down=self.vswitch_down(name+'_Bside',tagA=tagA,tagB=tagB,debug=debug,profile=profile)
+      self.up=self.vswitch_up(name+'_Aside',tagA=tagA,tagB=tagB,debug=debug,profile=profile,MaxSize=MaxSize,age=age,usebackpressure=True)
+      self.down=self.vswitch_down(name+'_Bside',tagA=tagA,tagB=tagB,debug=debug,profile=profile,MaxSize=MaxSize,age=age,usebackpressure=True)
       self.A=self.up.A
       self.B=self.down.B
       self.debug=debug
@@ -286,7 +287,7 @@ class vswitch(object):
        def inspectB(self,stream,name):
           return stream # !!!!!!!!!!!!
           stream1=stream.decode("HEX")
-          stream1=Ether(stream1)
+          tream1=Ether(stream1)
           p=manip(stream1,self.name)
           if self.debug:
              print "inspectB2a",name,p.struct
@@ -304,12 +305,12 @@ class host(object):
         mdst='00:00:00:00:00:11',
         isrc='1.1.1.1',
         idst='2.2.2.2',
-        dport=2345):
+        dport=2345,MaxSize=0,age=0):
       sport=random.randint(1024,64000)
       self.name=name
       self.up=self.eth_up(name,mdrop=mdrop,
             msrc=msrc,mdst=mdst,isrc=isrc,
-            idst=idst,sport=sport,dport=dport)
+            idst=idst,sport=sport,dport=dport,MaxSize=MaxSize,age=age,usebackpressure=True)
       self.A=self.up.A
       self.B=self.up.B
 
