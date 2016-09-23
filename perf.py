@@ -51,9 +51,9 @@ ploss=scount-rcount
 duration=end_time-start_time
 print "Send Count :%d, Receive Count :%d, Jitter Count:%d" % (scount, rcount, jcount)
 print "packet loss %d (%0.3f %%)" % (ploss,ploss*100.0/scount)
-print "average jitter %0.3f ms" % float(jtotal/jcount)
-print "average delay %0.5f ms" % float(delay/rcount)
-print "Total Time %0.3f sec, Throughput %0.3f per second" % (float(duration),float(payloadtotal*8/duration))
+print "average jitter %0.3f ms" % float(jtotal*1000/jcount)
+print "average delay %0.3f ms" % float(delay*1000/rcount)
+print "Total Time %0.3f sec, Throughput %0.3f bps" % (float(duration),float(payloadtotal*8/duration))
 
 rtlmt=get_tally('rtlmt')
 bkprs=get_tally('bkprs')
