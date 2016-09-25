@@ -15,7 +15,7 @@ traf=trafgen('traf1',ms1=1)
 term2=terminal('term2')
 #flowgen=flowgen('flowgen',start=0.002,stop=1.0,ival=0.05,flowcount=1)
 
-scenario=4
+scenario=2
 
 if scenario == 0:
    flowgen=flowgen('flowgen',start=0.002,stop=1.0,ival=0.05,flowcount=10)
@@ -62,7 +62,7 @@ elif scenario == 2: # Classic architecture - standard buffers
   olt=vswitch('olt',"Dot1Q(vlan=22)","",MaxSize=standardbuffers)
   cpe=vswitch('cpe',"","Dot1Q(vlan=35)",MaxSize=standardbuffers)
   bras=vswitch('bras',"Dot1Q(vlan=35)","",MaxSize=standardbuffers)
-  homerouter=eth_switch('hr',MaxSize=standardbuffers)
+  homerouter=eth_switch('hr',MaxSize=standardbuffers,profile=True)
   metrorouter=vswitch('mr',"","MPLS(label=250)",MaxSize=standardbuffers)
   corerouter=vswitch('cr',"MPLS(label=250)","",MaxSize=standardbuffers)
   connect('hostcon1',host1.B,traf.B)
@@ -92,7 +92,7 @@ elif scenario == 3: # Classic architecture - standard buffers, Aged Queue (to de
   olt=vswitch('olt',"Dot1Q(vlan=22)","",MaxSize=standardbuffers)
   cpe=vswitch('cpe',"","Dot1Q(vlan=35)",MaxSize=standardbuffers)
   bras=vswitch('bras',"Dot1Q(vlan=35)","",MaxSize=standardbuffers)
-  homerouter=eth_switch('hr',MaxSize=standardbuffers)
+  homerouter=eth_switch('hr',MaxSize=standardbuffers,profile=True)
   metrorouter=vswitch('mr',"","MPLS(label=250)",MaxSize=standardbuffers,age=10)
   corerouter=vswitch('cr',"MPLS(label=250)","",MaxSize=standardbuffers,age=10)
   connect('hostcon1',host1.B,traf.B)
@@ -120,10 +120,10 @@ elif scenario == 4: # New Arch - standard buffers
   link3=datalink('link3',latency=2,ber=-12,MaxSize=standardbuffers,capacity=5)
   onu=vswitch('onu',"","Dot1Q(vlan=70)",MaxSize=standardbuffers)
   olt=vswitch('olt',"Dot1Q(vlan=70)","",MaxSize=standardbuffers)
-  cpe=eth_switch('cpe',MaxSize=standardbuffers)
-  accessswitch=eth_switch('as',MaxSize=standardbuffers)
-  metroswitch=eth_switch('ms',MaxSize=standardbuffers)
-  coreswitch=eth_switch('cs')
+  cpe=eth_switch('cpe',MaxSize=standardbuffers,profile=True)
+  accessswitch=eth_switch('as',MaxSize=standardbuffers,profile=True)
+  metroswitch=eth_switch('ms',MaxSize=standardbuffers,profile=True)
+  coreswitch=eth_switch('cs',profile=True)
   connect('c1',cpe.B,onu.A)
   connect('c2',onu.B,pon.A)
   connect('c3',pon.B,olt.A)
