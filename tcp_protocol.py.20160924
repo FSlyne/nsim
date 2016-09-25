@@ -25,7 +25,6 @@ class TCPSocket(process):
         self.use_fastretransmit = True
         self.window = self.reqwindow = self.mss =1000
         self.cwnd = self.mss
-        self.rtt = 0
         self.ssthresh = self.mss * 5
         self.congestion_state = 0 # slow start =0, congestion avoid = 1, fast recovery = 2
 
@@ -51,7 +50,7 @@ class TCPSocket(process):
         self.ackmgr()
         self.cleanup()
 
-        self.retranQ = retransmission(callback=self.sendseq, xid=self.xid,congmgr=self.congestion_mgr,rttfunc=self.getrtt)
+        self.retranQ = retransmission(callback=self.sendseq, xid=self.xid,congmgr=self.congestion_mgr)
 
     def randtoken(self,size=6, chars=string.ascii_uppercase + string.digits):
       return ''.join(self.random.choice(chars) for _ in range(size))
@@ -78,10 +77,10 @@ class TCPSocket(process):
                scount+=1
                del self.seq_sndtime[seq]
          if scount == 0:
-            self.rtt = max(self.rtt,0)
+            rtt = 0
          else:
-            self.rtt = float(2000 * stime/scount)
-         f.write("%0.3f\t%s\t%s\t%0.3f\n" %(float(self.getsimtime()),str(self.window),str(self.ssthresh),self.rtt))
+            rtt = float(2000 * stime/scount)
+         f.write("%0.3f\t%s\t%s\t%0.3f\n" %(float(self.getsimtime()),str(self.window),str(self.ssthresh),rtt))
       f.close()
         
     @staticmethod
@@ -367,9 +366,6 @@ class TCPSocket(process):
         recv = self.r.blpop("recvbuf:"+self.xid)[1]
         return recv
 
-    def getrtt(self):
-        return self.rtt
-
     @threaded
     def ackmgr(self):
       while True:
@@ -409,12 +405,11 @@ class TCPSocket(process):
                     key="ack:"+self.xid+":"+"%010d" % seq
                     del self.ackdict["ack:"+self.xid+":"+"%010d" % seq]
         self.unlock(lock)
-        self.waitfor(1)
+        self.waitfor(5)
 
 class retransmission(process):
-    def __init__(self,callback='',congmgr='',xid='',queue='retransmission',rto=3.000,rttfunc=''):
+    def __init__(self,callback='',congmgr='',xid='',queue='retransmission',rto=3.000):
        self.r = redis.Redis(host=host,port=port )
-       self.rttfunc=rttfunc
        self.xid=xid
        self.queue = queue
        self.queue2 = queue+"2"
@@ -426,6 +421,7 @@ class retransmission(process):
        self.garbage=Queue()
        process.__init__(self,0)
        self.routine()
+       self.routine2()
        self.cleanup()
 
     @threaded
@@ -438,11 +434,23 @@ class retransmission(process):
     def routine(self):
        while True:
           for seq,tick in self.r.zrangebyscore(self.queue, 0 ,str(float(self.getsimtime())+self.gap),withscores=True):
-             self.r.zrem(self.queue, str(seq))
              self.congmgr(0) # signal a timeout
              print "timeout - 1",seq,tick,self.getsimtime()
-             self.callback(seq) # send again
-             self.add(seq) # add sequence again, but with later rto
+             self.callback(seq)
+             self.remove(seq)
+             self.add2(seq)
+          else:
+             self.waitfor(10)
+
+    @threaded
+    def routine2(self):
+       while True:
+          for seq,tick in self.r.zrangebyscore(self.queue2, 0 ,str(float(self.getsimtime())+self.gap),withscores=True):
+             self.congmgr(0) # signal a timeout
+             print "timeout - 2"
+             self.callback(seq)
+             self.remove2(seq)
+#             self.add(seq)
           else:
              self.waitfor(10)
 
@@ -455,11 +463,22 @@ class retransmission(process):
          size=0
        return self.r.zrem(self.queue, str(seq)),size
 
+    def remove2(self,seq):
+       "seq:"+self.xid+":"+str(seq)
+       try:
+         size=int(len(self.r.get(key)))
+         self.garbage.put(key)
+       except:
+         size=0
+       return self.r.zrem(self.queue2, str(seq)),size
+
     def add(self,seq):
-       myrto=self.r.incr("rto:%s" % str(seq))
-       later = float(myrto*self.rto)+float(self.getsimtime())
-#        later = self.rttfunc()/1000+float(self.getsimtime())
+       later = float(self.rto)+float(self.getsimtime())
        self.r.zadd(self.queue,str(seq),str(later))
+
+    def add2(self,seq):
+       later = float(self.rto)+float(self.getsimtime())
+       self.r.zadd(self.queue2,str(seq),str(later))
 
 
     def cleardown(self,threshseq):
@@ -467,16 +486,19 @@ class retransmission(process):
        tally=0
        for seq,tick in self.r.zrangebyscore(self.queue, 0 ,str(100000000),withscores=True):
          if int(seq) <= int(threshseq):
-            cnt=self.r.incr("ackrecv:%s" % str(seq))
-            if cnt > 2:
-               self.congmgr(1)        
             status,size = self.remove(seq)
+            tally+=size
+       for seq,tick in self.r.zrangebyscore(self.queue2, 0 ,str(100000000),withscores=True):
+         if int(seq) <= int(threshseq):
+            status,size =self.remove2(seq)
             tally+=size
        return tally
 
     def clearall(self):
        for seq,tick in self.r.zrangebyscore(self.queue, 0 ,str(1000000000),withscores=True):
            self.remove(seq)
+       for seq,tick in self.r.zrangebyscore(self.queue2, 0 ,str(1000000000),withscores=True):
+           self.remove2(seq)
 
 
 

@@ -63,7 +63,7 @@ class AgedQueue(process):
 #      print ulimit,w,self.age
       if ulimit - w > self.age:
          self.updatestats(self.name,1,'pktdrp_age')
-         print "Dropping Packet", ulimit,w,ulimit-w
+#         print "Dropping Packet", ulimit,w,ulimit-w
          self.garbage.put(key)
       else:
          item=r.get(key)
@@ -289,7 +289,7 @@ class connector(process):
          if self.usebackpressure:
             if self.b.MaxSize > 0:
                if self.b.qsize() >= self.b.MaxSize:
-                  print "Back Pressure", self.name,self.a.qsize(),self.b.qsize(), self.b.MaxSize
+#                  print "Back Pressure", self.name,self.a.qsize(),self.b.qsize(), self.b.MaxSize
                   self.updatestats(self.name,1,'bkprs')
                   self.waitfor(1) # msec
                   continue
@@ -317,7 +317,7 @@ class connector(process):
 
          if not self.b.put(item):
             pass
-            print self.name,"Dropping Packets"
+#            print self.name,"Dropping Packets"
             self.updatestats(self.name,1,'pktdrp_mxq')
       print "Thread Finishing !!!"
 

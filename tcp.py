@@ -56,7 +56,7 @@ sched=scheduler(tick=0.001,finish=10)
 tcpxmit=tcpgen('tcpxmit',stop=3.0)
 tcprecv=tcpterm('tcprecv')
 
-scenario=7
+scenario=0
 
 
 # duplex2('node1',ratelimit=1000,MaxSize=100)

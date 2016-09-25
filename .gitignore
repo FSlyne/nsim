@@ -1,5 +1,6 @@
 # Frank Slyne
 .local
+.stats
 
 # Network Trace Files
 *.pcap
